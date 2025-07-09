@@ -1,0 +1,732 @@
+import { useParams, useNavigate } from "react-router-dom";
+import { useStore } from "@/store/useStore";
+import { Product } from "@/types/product";
+import { Navbar } from "@/components/Navbar";
+
+import { ProductCard } from "@/components/ProductCard";
+import { ProductModal } from "@/components/ProductModal";
+import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import {
+  ShoppingCart,
+  Share2,
+  Plus,
+  Minus,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import { Link } from "react-router-dom";
+import Footer from "@/components/Footer";
+import { formatPrice } from "@/utils/format";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import initialData from "@/data/store.json";
+import { Badge } from "@/components/ui/badge";
+import { Store, Route, MapPin } from "lucide-react";
+
+const ProductDetails = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedSizeIdx, setSelectedSizeIdx] = useState(0);
+  const [selectedExtraIdx, setSelectedExtraIdx] = useState<number | null>(null);
+  const products = useStore((state) => state.products);
+  const cart = useStore((state) => state.cart);
+  const addToCart = useStore((state) => state.addToCart);
+  const removeFromCart = useStore((state) => state.removeFromCart);
+  const updateCartItemQuantity = useStore(
+    (state) => state.updateCartItemQuantity
+  );
+  const updateCartItemOptions = useStore(
+    (state) => state.updateCartItemOptions
+  );
+  const refreshProducts = useStore((state) => state.refreshProducts);
+
+  // Refresh products from store.json when component mounts
+  useEffect(() => {
+    refreshProducts();
+  }, [refreshProducts]);
+
+  // Find current product
+  const product = products.find((p) => p.id === id);
+
+  // Check if product is in cart
+  const cartItem = cart.find((item) => item.productId === id);
+
+  // Find suggested products (same category, excluding current product)
+  const suggestedProducts = products
+    .filter(
+      (p) =>
+        p.category === product?.category &&
+        p.id !== product?.id &&
+        !p.isArchived
+    )
+    .slice(0, 4);
+
+  // حساب السعر بعد الخصم (إن وجد)
+  const basePrice = Number(product.price);
+  const selectedSizePrice =
+    product.sizesWithPrices && product.sizesWithPrices.length > 0
+      ? Number(product.sizesWithPrices[selectedSizeIdx]?.price || 0)
+      : 0;
+  const selectedExtraPrice =
+    product.extras && product.extras.length > 0 && selectedExtraIdx !== null
+      ? Number(product.extras[selectedExtraIdx]?.price || 0)
+      : 0;
+
+  // هل يوجد عرض خاص فعال؟
+  const hasActiveDiscount = product.specialOffer && new Date(product.offerEndsAt as string) > new Date();
+  const discountPercentage = hasActiveDiscount ? Number(product.discountPercentage || 0) : 0;
+  // السعر الأساسي بعد الخصم (بدون الإضافات)
+  const discountedBasePrice = hasActiveDiscount
+    ? basePrice - (basePrice * discountPercentage) / 100
+    : basePrice;
+  // السعر النهائي بعد الخصم مع الإضافات/الأحجام
+  const finalPrice = discountedBasePrice + selectedSizePrice + selectedExtraPrice;
+  // السعر الأصلي مع الإضافات/الأحجام (للعرض بجانب السعر المخفض)
+  const originalFullPrice = basePrice + selectedSizePrice + selectedExtraPrice;
+
+  useEffect(() => {
+    if (!product) {
+      navigate("/products");
+    }
+  }, [product, navigate]);
+
+  useEffect(() => {
+    if (!product) return;
+    if (!cartItem) {
+      setSelectedSizeIdx(0);
+      setSelectedExtraIdx(null);
+      return;
+    }
+    if (
+      product.sizesWithPrices &&
+      product.sizesWithPrices.length > 0 &&
+      cartItem.selectedSize
+    ) {
+      const idx = product.sizesWithPrices.findIndex(
+        (s) => s.size === cartItem.selectedSize
+      );
+      setSelectedSizeIdx(idx >= 0 ? idx : 0);
+    } else {
+      setSelectedSizeIdx(0);
+    }
+    if (product.extras && product.extras.length > 0 && cartItem.selectedExtra) {
+      const idx = product.extras.findIndex(
+        (e) => e.name === cartItem.selectedExtra
+      );
+      setSelectedExtraIdx(idx >= 0 ? idx : null);
+    } else {
+      setSelectedExtraIdx(null);
+    }
+  }, [product, cartItem]);
+
+  if (!product) {
+    return null;
+  }
+
+  const handleAddToCart = () => {
+    const selectedSize =
+      product.sizesWithPrices && product.sizesWithPrices.length > 0
+        ? product.sizesWithPrices[selectedSizeIdx]?.size
+        : undefined;
+    const selectedExtra =
+      product.extras && product.extras.length > 0 && selectedExtraIdx !== null
+        ? product.extras[selectedExtraIdx]?.name
+        : undefined;
+    addToCart(product, 1, selectedSize, selectedExtra);
+    toast.success(`${t("cart.productAdded")}: ${product.name}`, {
+      duration: 5000,
+      dismissible: true,
+    });
+  };
+
+  const handleUpdateQuantity = (newQuantity: number) => {
+    if (newQuantity === 0) {
+      removeFromCart(product.id);
+      toast.success(`${t("cart.productRemoved")}: ${product.name}`, {
+        duration: 5000,
+        dismissible: true,
+      });
+    } else {
+      updateCartItemQuantity(product.id, newQuantity);
+    }
+  };
+
+  const handleShare = () => {
+    const productUrl = `${window.location.origin}/products/${product.id}`;
+
+    // Create a detailed message with emojis
+    const message = [
+      `🛍️ *${product.name}*`,
+      `🏷️ ${t("products.brand")}: ${product.brand}`,
+      `💰 ${t("products.price")}: ${product.price} EGP`,
+      product.specialOffer &&
+      new Date(product.offerEndsAt as string) > new Date()
+        ? `🎉 ${t("products.specialPrice")}: ${Math.round(
+            product.price -
+              (product.price * (product.discountPercentage || 0)) / 100
+          )} EGP`
+        : null,
+      product.description
+        ? `📝 ${t("products.description")}: ${product.description}`
+        : null,
+      product.category
+        ? `📦 ${t("products.category")}: ${product.category}`
+        : null,
+      product.size ? `📏 ${t("products.size")}: ${product.size}` : null,
+      product.color
+        ? `🎨 ${t("products.color")}: ${product.color
+            .split(",")
+            .map((color) => getColorName(color.trim()))
+            .join(", ")}`
+        : null,
+      `\n🔗 ${t("common.viewProduct")}: ${productUrl}`,
+    ]
+      .filter(Boolean) // Remove null values
+      .join("\n");
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`);
+  };
+
+  const getColorName = (hexCode: string) => {
+    const colorMap: { [key: string]: string } = {
+      "#000000": "Black",
+      "#FFFFFF": "White",
+      "#FF0000": "Red",
+      "#008000": "Green",
+      "#0000FF": "Blue",
+      "#FFFF00": "Yellow",
+      "#800080": "Purple",
+      "#FFA500": "Orange",
+      "#FFC0CB": "Pink",
+      "#808080": "Gray",
+      "#A52A2A": "Brown",
+      "#F5F5DC": "Beige",
+      "#000080": "Navy",
+      "#800000": "Maroon",
+      "#008080": "Teal",
+      "#FFD700": "Gold",
+      "#C0C0C0": "Silver",
+    };
+    return colorMap[hexCode] || hexCode;
+  };
+
+  const displayColors = (colors: string) => {
+    if (!colors) return null;
+    return colors.split(",").map((color, index) => {
+      const trimmedColor = color.trim();
+      return (
+        <div key={index} className="flex items-center gap-2 mb-2">
+          <div
+            className="w-6 h-6 rounded-full border"
+            style={{ backgroundColor: trimmedColor }}
+          />
+          <span className="text-muted-foreground">
+            {t(`colors.${getColorName(trimmedColor)}`)}
+          </span>
+        </div>
+      );
+    });
+  };
+
+  const handleSizeChange = (idx: number) => {
+    setSelectedSizeIdx(idx);
+    if (
+      cartItem &&
+      product.sizesWithPrices &&
+      product.sizesWithPrices.length > 0
+    ) {
+      const selectedSize = product.sizesWithPrices[idx]?.size;
+      updateCartItemOptions(product.id, selectedSize, cartItem.selectedExtra);
+    }
+  };
+
+  const handleExtraChange = (idx: number | null) => {
+    setSelectedExtraIdx(idx);
+    if (cartItem && product.extras && product.extras.length > 0) {
+      const selectedExtra =
+        idx !== null ? product.extras[idx]?.name : undefined;
+      updateCartItemOptions(product.id, cartItem.selectedSize, selectedExtra);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+
+      <main className="container py-8 px-4 md:px-8 flex-1">
+        {/* Breadcrumb */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <Breadcrumb>
+            <BreadcrumbList className="flex items-center text-sm">
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to="/"
+                    className="flex items-center text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-1"
+                    >
+                      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    {t("navigation.home")}
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <span className="mx-2 text-muted-foreground">&lt;</span>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to="/products"
+                    className="text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {t("navigation.products")}
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+
+              <span className="mx-2 text-muted-foreground">&lt;</span>
+              <BreadcrumbItem>
+                <BreadcrumbPage className="font-medium text-primary">
+                  {product.name}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </motion.div>
+
+        {/* Product Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          {/* Product Images */}
+          <div className="space-y-4">
+            {/* Main Image */}
+            <div className="aspect-[1/1] w-full rounded-lg overflow-hidden relative group">
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={selectedImage}
+                  src={product.images[selectedImage]}
+                  alt={product.name}
+                  className="h-full w-full object-contain rounded-lg cursor-pointer "
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.05 }}
+                  transition={{ duration: 0.2 }}
+                />
+              </AnimatePresence>
+              {/* Navigation arrows */}
+              {product.images.length > 1 && (
+                <>
+                  <button
+                    onClick={() =>
+                      setSelectedImage((prev) =>
+                        prev > 0 ? prev - 1 : product.images.length - 1
+                      )
+                    }
+                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      setSelectedImage((prev) =>
+                        prev < product.images.length - 1 ? prev + 1 : 0
+                      )
+                    }
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+                </>
+              )}
+            </div>
+            {/* Thumbnails */}
+            {product.images.length > 1 && (
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                {product.images.map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedImage(index)}
+                    className={`relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border-2 ${
+                      selectedImage === index
+                        ? "border-primary"
+                        : "border-transparent"
+                    }`}
+                  >
+                    <img
+                      src={image}
+                      alt={`${product.name} thumbnail ${index + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Product Info */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className={`space-y-6 ${
+              product.specialOffer &&
+              new Date(product.offerEndsAt as string) > new Date()
+                ? "relative before:absolute before:inset-0 before:bg-white before:rounded-lg before:-z-10 before:scale-105"
+                : ""
+            }`}
+          >
+            <div className="flex flex-col gap-6">
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {t("products.name")}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold tracking-tight">
+                    {product.name}
+                  </h1>
+                  {product.specialOffer && (
+                    <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm font-medium">
+                      {t("products.specialOffer")}
+                    </span>
+                  )}
+                </div>
+                {/* بيانات الموقع */}
+                {(() => {
+                  // استخراج بيانات الفروع والشوارع والمناطق
+                  const branches = initialData.branches || [];
+                  const streets = initialData.streets || [];
+                  const regions = initialData.regions || [];
+                  // ابحث عن الفرع الذي يحتوي المنتج
+                  const branch = branches.find(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+                  const street = branch ? streets.find(s => s.id === branch.streetId) : null;
+                  const region = street ? regions.find(r => (r.streets || []).includes(street.id)) : null;
+                  if (!branch && !street && !region) return null;
+                  return (
+                    <div className="flex flex-wrap gap-2 mt-2 mb-1">
+                      {branch && (
+                        <Badge className="bg-primary/10 text-primary font-bold flex items-center gap-1 px-3 py-2 text-base">
+                          <Store className="w-4 h-4 mr-1 text-primary" />
+                          {branch.name}
+                        </Badge>
+                      )}
+                      {street && (
+                        <Badge className="bg-blue-50 text-blue-700 font-bold flex items-center gap-1 px-3 py-2 text-base">
+                          <Route className="w-4 h-4 mr-1 text-blue-600" />
+                          شارع: {street.name}
+                        </Badge>
+                      )}
+                      {region && (
+                        <Badge className="bg-green-50 text-green-700 font-bold flex items-center gap-1 px-3 py-2 text-base">
+                          <MapPin className="w-4 h-4 mr-1 text-green-600" />
+                          بمنطقة: {region.name}
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Size selection as buttons */}
+              {product.sizesWithPrices &&
+                product.sizesWithPrices.length > 0 && (
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium mb-2">اختر الحجم</h3>
+                    <div className="flex gap-2 flex-wrap">
+                      {product.sizesWithPrices.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className={`px-3 py-2 rounded border text-sm font-medium transition-colors duration-150 ${
+                            selectedSizeIdx === idx
+                              ? "bg-primary text-white border-primary"
+                              : "bg-gray-100 text-gray-800 border-gray-300 hover:bg-primary/10"
+                          }`}
+                          onClick={() => handleSizeChange(idx)}
+                        >
+                          {item.size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Extras selection as buttons */}
+              {product.extras && product.extras.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-medium mb-2">اختر الإضافة</h3>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded border text-sm font-medium transition-colors duration-150 ${
+                        selectedExtraIdx === null
+                          ? "bg-primary text-white border-primary"
+                          : "bg-gray-100 text-gray-800 border-gray-300 hover:bg-primary/10"
+                      }`}
+                      onClick={() => handleExtraChange(null)}
+                    >
+                      بدون إضافة
+                    </button>
+                    {product.extras.map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`px-3 py-2 rounded border text-sm font-medium transition-colors duration-150 ${
+                          selectedExtraIdx === idx
+                            ? "bg-primary text-white border-primary"
+                            : "bg-gray-100 text-gray-800 border-gray-300 hover:bg-primary/10"
+                        }`}
+                        onClick={() => handleExtraChange(idx)}
+                      >
+                        {item.name}{" "}
+                        {item.price &&
+                          `+${formatPrice(Number(item.price))} جنيه`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  السعر
+                </h2>
+                <div className="flex items-center gap-3">
+                  {hasActiveDiscount && (
+                    <span className="text-lg font-medium text-gray-400 line-through">
+                      {formatPrice(originalFullPrice)} جنيه
+                    </span>
+                  )}
+                  <span className="text-2xl font-bold text-primary">
+                    {formatPrice(finalPrice)} جنيه
+                  </span>
+                  {hasActiveDiscount && (
+                    <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold">
+                      خصم {discountPercentage}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-secondary/10 p-0 rounded-lg">
+                  <h3 className="text-sm font-medium mb-2">
+                    {t("products.category")}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {product.category}
+                    {product.subcategory &&
+                    product.subcategory !== "لا يوجد" &&
+                    product.subcategory.trim() !== "" ? (
+                      <span className="ml-1">/ {product.subcategory}</span>
+                    ) : null}
+                  </p>
+                </div>
+
+                {product.merchant && (
+                  <div className="bg-secondary/10 p-4 rounded-lg">
+                    <h3 className="text-sm font-medium mb-2">
+                      {t("products.merchant")}
+                    </h3>
+                    <p className="text-muted-foreground">{product.merchant}</p>
+                  </div>
+                )}
+                {product.wholesaleInfo?.supplierName && (
+                  <div className="bg-secondary/10 p-4 rounded-lg">
+                    <h3 className="text-sm font-medium mb-2">
+                      {t("products.supplier")}
+                    </h3>
+                    <p className="text-muted-foreground">
+                      {product.wholesaleInfo.supplierName}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  {t("products.description")}
+                </h2>
+                <div
+                  className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert
+                  prose-headings:font-semibold
+                  prose-p:leading-relaxed
+                  prose-ul:list-disc prose-ul:pl-4
+                  prose-ol:list-decimal prose-ol:pl-4
+                  prose-li:my-1
+                  prose-strong:text-foreground
+                  prose-em:text-foreground/80
+                  prose-ul:marker:text-foreground
+                  prose-ol:marker:text-foreground"
+                  dangerouslySetInnerHTML={{ __html: product.description }}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {cartItem ? (
+                <>
+                  {/* Quantity Controls */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {t("cart.quantity")}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          handleUpdateQuantity(cartItem.quantity - 1)
+                        }
+                        className="h-8 w-8"
+                        title={t("cart.decrease")}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="w-8 text-center font-medium">
+                        {cartItem.quantity}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          handleUpdateQuantity(cartItem.quantity + 1)
+                        }
+                        className="h-8 w-8"
+                        title={t("cart.increase")}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col  sm:flex-row gap-4">
+                    <Button
+                      size="lg"
+                      className="sm:flex-1 flex-1   text-base p-2"
+                      onClick={() => navigate("/cart")}
+                    >
+                      <ShoppingCart className="mr-2 h-6 w-6 sm:h-5 sm:w-5" />
+                      {t("cart.goToCart")}
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="sm:flex-1 flex-1 text-base bg-green-600 p-2 hover:bg-green-700 text-white"
+                      onClick={handleShare}
+                    >
+                      <Share2 className="mr-2 h-6 w-6 sm:h-5 sm:w-5" />
+                      {t("common.shareOnWhatsApp")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button
+                    size="lg"
+                    className={`flex-1 h-14 text-lg ${
+                      product.specialOffer &&
+                      new Date(product.offerEndsAt as string) > new Date()
+                        ? "bg-black hover:bg-gray-700"
+                        : ""
+                    }`}
+                    onClick={handleAddToCart}
+                  >
+                    <ShoppingCart className="mr-2 h-6 w-6" />
+                    {t("cart.addToCart")}
+                  </Button>
+                  <Button
+                    size="lg"
+                    className="flex-1 h-14 text-lg bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleShare}
+                  >
+                    <Share2 className="mr-2 h-6 w-6" />
+                    {t("common.shareOnWhatsApp")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="relative my-20">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+          </div>
+          <div className="relative flex justify-center">
+            <div className="bg-white dark:bg-gray-900 px-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                <span className="text-lg font-semibold text-primary">
+                  {t("products.suggestedProducts")}
+                </span>
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="container py-8">
+          <h2 className="text-2xl font-bold mb-6">
+            {t("products.suggestedProducts")}
+          </h2>
+          {suggestedProducts.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+              {suggestedProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onView={() => {
+                    setSelectedProduct(product);
+                    setModalOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+
+      <ProductModal
+        product={selectedProduct}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
+    </div>
+  );
+};
+
+export default ProductDetails;
