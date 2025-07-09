@@ -25,7 +25,11 @@ export interface AnalyticsData {
   averageSessionDuration: number;
   topPages: Array<{ page: string; views: number }>;
   visitorsByDay: Array<{ date: string; visitors: number }>;
-  visitorsByHour: Array<{ hour: number; visitors: number }>;
+  visitorsByHour: Array<{ hour: number; visitors: number; label: string }>;
   newVisitors: number;
   returningVisitors: number;
+  bounceRate: number;
+  avgPagesPerSession: number;
+  peakHour: number;
+  peakDay: string;
 }

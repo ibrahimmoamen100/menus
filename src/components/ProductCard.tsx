@@ -8,6 +8,8 @@ import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { formatPrice } from "@/utils/format";
+import { createProductUrl } from "@/utils/urlUtils";
+import storeData from "@/data/store.json";
 
 interface ProductCardProps {
   product: Product & {
@@ -26,9 +28,15 @@ export const ProductCard = ({
 }: ProductCardProps) => {
   const addToCart = useStore((state) => state.addToCart);
   const cart = useStore((state) => state.cart);
+  const filters = useStore((state) => state.filters);
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
+
+  // جلب بيانات المناطق والشوارع والفروع
+  const regions = storeData.regions || [];
+  const streets = storeData.streets || [];
+  const branches = storeData.branches || [];
 
   // Calculate time remaining for special offers
   useEffect(() => {
@@ -74,7 +82,8 @@ export const ProductCard = ({
       (product.sizesWithPrices && product.sizesWithPrices.length > 0) ||
       (product.extras && product.extras.length > 0)
     ) {
-      navigate(`/products/${product.id}`);
+      const productUrl = createProductUrl(product.id, filters, regions, streets, branches);
+      navigate(productUrl);
       return;
     }
     if (isInCart) {

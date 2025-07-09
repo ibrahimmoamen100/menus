@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import storeData from "@/data/store.json";
 import { Store } from "lucide-react";
+import { textToSlug } from "@/utils/urlUtils";
 
 interface StreetsCarouselProps {
   regionId: string;
@@ -73,7 +74,7 @@ const StreetsCarousel: React.FC<StreetsCarouselProps> = ({ regionId }) => {
                   <motion.div
                     whileHover={{ scale: 1.03 }}
                     className="group relative h-32  p-8 rounded-xl  cursor-pointer bg-gradient-to-br from-primary/10 to-secondary/20 shadow-md flex flex-col items-center justify-center transition-transform duration-200 hover:shadow-md border border-primary/10"
-                    onClick={() => navigate(`/products?streetId=${street.id}`)}
+                    onClick={() => navigate(`/products?street=${textToSlug(street.name)}`)}
                   >
                     {/* كلمة شارع */}
                     <span className="text-xs font-semibold text-primary/80 tracking-widest mb-1">شارع</span>

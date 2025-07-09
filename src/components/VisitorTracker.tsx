@@ -38,6 +38,7 @@ export const VisitorTracker = () => {
       userAgent: navigator.userAgent,
       referrer: document.referrer || undefined,
       sessionId: sessionIdRef.current,
+      visitorId: visitorIdRef.current,
       isNewVisitor,
     };
 
@@ -59,22 +60,25 @@ export const VisitorTracker = () => {
     // دالة لحساب مدة الزيارة عند مغادرة الصفحة
     const handleBeforeUnload = () => {
       const visitDuration = Date.now() - startTimeRef.current;
+      analyticsService.updateVisitDuration(sessionIdRef.current, visitDuration);
+    };
 
-      // تحديث مدة الزيارة في البيانات المحفوظة
-      const visitors = analyticsService.getVisitors();
-      const lastVisitor = visitors[visitors.length - 1];
-      if (lastVisitor && lastVisitor.sessionId === sessionIdRef.current) {
-        lastVisitor.visitDuration = visitDuration;
-        // حفظ البيانات المحدثة
-        localStorage.setItem("visitors", JSON.stringify(visitors));
-      }
+    // دالة لحساب مدة الزيارة عند تغيير الصفحة
+    const handlePageChange = () => {
+      const visitDuration = Date.now() - startTimeRef.current;
+      analyticsService.updateVisitDuration(sessionIdRef.current, visitDuration);
+      startTimeRef.current = Date.now();
     };
 
     // إضافة مستمع لحدث مغادرة الصفحة
     window.addEventListener("beforeunload", handleBeforeUnload);
+    
+    // إضافة مستمع لحدث تغيير الصفحة
+    window.addEventListener("popstate", handlePageChange);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePageChange);
     };
   }, []); // تشغيل مرة واحدة فقط عند تحميل المكون
 

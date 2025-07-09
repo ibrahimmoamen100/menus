@@ -1,14 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // السماح بالقراءة والكتابة على مجموعة orders
+    // قواعد الطلبات - السماح بالقراءة والكتابة للجميع (للطلبات)
     match /orders/{orderId} {
       allow read, write: if true;
     }
     
-    // السماح بالقراءة والكتابة على جميع المجموعات الأخرى
+    // قواعد جلسات المسؤول - حماية خاصة
+    match /admin_sessions/{sessionId} {
+      // السماح بالقراءة والكتابة فقط للمسؤولين المعتمدين
+      allow read, write: if request.auth != null || 
+        (resource == null && request.resource.data.keys().hasAll(['isAuthenticated', 'loginTime', 'expiresAt', 'token'])) ||
+        (resource != null && resource.data.isAuthenticated == true);
+    }
+    
+    // قواعد عامة - رفض الوصول لجميع المجموعات الأخرى
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 } 

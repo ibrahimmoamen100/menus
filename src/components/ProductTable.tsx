@@ -25,6 +25,9 @@ import {
   ArrowDownToLine,
   Building2,
   Settings,
+  Archive,
+  Package,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -47,8 +50,8 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
-import { DEFAULT_SUPPLIER } from "@/constants/supplier";
 import { formatPrice } from "@/utils/format";
+import { updateProductArchiveStatus, getUnassignedProductsCount } from "@/utils/productUtils";
 
 // Branch interface
 interface Branch {
@@ -164,6 +167,36 @@ export function ProductTable({
         }
       });
 
+      // تحديث حالة الأرشفة للمنتج بناءً على ربطه بالفروع
+      const updatedBranches = branches.map(branch => {
+        if (selectedBranches.has(branch.id)) {
+          const currentProducts = branch.products || [];
+          const productExists = currentProducts.some(p => p.id === selectedProduct.id);
+          if (!productExists) {
+            return {
+              ...branch,
+              products: [...currentProducts, { id: selectedProduct.id, name: selectedProduct.name }]
+            };
+          }
+        } else {
+          return {
+            ...branch,
+            products: (branch.products || []).filter(p => p.id !== selectedProduct.id)
+          };
+        }
+        return branch;
+      });
+
+      // التحقق من حالة الأرشفة
+      const isProductAssigned = selectedBranches.size > 0;
+      if (isProductAssigned && selectedProduct.isArchived) {
+        // إزالة الأرشفة إذا تم ربط المنتج بفرع
+        toast.success("تم ربط المنتج بفرع وإزالة الأرشفة تلقائياً");
+      } else if (!isProductAssigned && !selectedProduct.isArchived) {
+        // أرشفة المنتج إذا لم يتم ربطه بأي فرع
+        toast.success("تم أرشفة المنتج تلقائياً لأنه غير مرتبط بأي فرع");
+      }
+
       toast.success("تم تحديث ربط المنتج بالفروع بنجاح");
       setIsBranchDialogOpen(false);
     } catch (error) {
@@ -197,13 +230,13 @@ export function ProductTable({
               <TableHead className="w-[120px] text-center">السعر</TableHead>
               <TableHead className="w-[120px] text-center">التصنيف</TableHead>
               {/* <TableHead className="w-[120px] text-center">الألوان</TableHead> */}
-              <TableHead className="w-[120px] text-center">المورد</TableHead>
               <TableHead className="w-[150px] text-center">
                 العرض الخاص
               </TableHead>
               <TableHead className="w-[150px] text-center">
                 تاريخ الإضافة
               </TableHead>
+              <TableHead className="w-[120px] text-center">الحالة</TableHead>
               <TableHead className="w-[120px] text-center">الفروع</TableHead>
               <TableHead className="w-[80px] text-center">الإجراءات</TableHead>
             </TableRow>
@@ -308,12 +341,6 @@ export function ProductTable({
                   </div>
                 </TableCell> */}
                 <TableCell className="text-center">
-                  <Badge variant="outline" className="font-normal">
-                    {product.wholesaleInfo?.supplierName ||
-                      DEFAULT_SUPPLIER.name}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-center">
                   {product.specialOffer ? (
                     <div className="flex flex-col items-center gap-1">
                       <Badge variant="secondary" className="w-fit">
@@ -352,6 +379,26 @@ export function ProductTable({
                         { addSuffix: true, locale: ar }
                       )}
                     </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">
+                  <div className="flex flex-col items-center gap-1">
+                    {product.isArchived ? (
+                      <Badge variant="destructive" className="text-xs">
+                        <Archive className="h-3 w-3 mr-1" />
+                        مؤرشف
+                      </Badge>
+                    ) : getProductBranches(product.id).length > 0 ? (
+                      <Badge variant="default" className="text-xs">
+                        <Package className="h-3 w-3 mr-1" />
+                        نشط
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        غير مرتبط
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-center">

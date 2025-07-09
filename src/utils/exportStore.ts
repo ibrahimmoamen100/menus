@@ -1,8 +1,21 @@
 
 import { useStore } from "@/store/useStore";
+import initialData from "@/data/store.json";
 
 export const exportStoreToFile = () => {
-  const jsonData = useStore.getState().exportToJSON();
+  const state = useStore.getState();
+  
+  // Create export data
+  const exportData = {
+    products: state.products,
+    branches: initialData.branches || [],
+    regions: initialData.regions || [],
+    streets: initialData.streets || [],
+    exportDate: new Date().toISOString(),
+    exportVersion: "1.0"
+  };
+  
+  const jsonData = JSON.stringify(exportData, null, 2);
   
   // Create a blob from the JSON data
   const blob = new Blob([jsonData], { type: "application/json" });

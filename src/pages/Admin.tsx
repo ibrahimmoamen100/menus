@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { Product } from "@/types/product";
 import { Navbar } from "@/components/Navbar";
+import { authService } from "@/services/authService";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ import {
   BarChart3,
   Settings,
   MapPin,
+  LogOut,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
@@ -60,6 +62,8 @@ import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { DEFAULT_SUPPLIER } from "@/constants/supplier";
 import { Card } from "@/components/ui/card";
+import { updateProductArchiveStatus, getUnassignedProductsCount } from "@/utils/productUtils";
+import { UnassignedProductsAlert } from "@/components/UnassignedProductsAlert";
 import {
   Dialog,
   DialogContent,
@@ -145,17 +149,92 @@ const Admin = () => {
     return Array.from(suppliers);
   }, [products]);
 
-  // Memoize statistics calculations
-  const statistics = useMemo(
-    () => ({
-      totalProducts: products?.length || 0,
-      totalCategories: new Set(products?.map((p) => p.category)).size,
-      totalSuppliers: uniqueSuppliers.length,
-      productsWithOffers: products?.filter((p) => p.specialOffer).length || 0,
-      archivedProducts: products?.filter((p) => p.isArchived).length || 0,
-    }),
-    [products, uniqueSuppliers]
-  );
+  // State for statistics
+  const [statistics, setStatistics] = useState({
+    totalProducts: 0,
+    totalRegions: 0,
+    totalBranches: 0,
+    activeOffers: 0,
+    totalStreets: 0,
+    archivedProducts: 0,
+  });
+
+  // التحقق من حالة تسجيل الدخول عند تحميل الصفحة
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      const isAuth = authService.isAuthenticated();
+      setIsAuthenticated(isAuth);
+      
+      // تحديث الجلسة إذا كانت صالحة
+      if (isAuth) {
+        await authService.refreshSession();
+      }
+    };
+    
+    checkAuthStatus();
+    
+    // تحديث الجلسة كل 30 دقيقة
+    const interval = setInterval(async () => {
+      if (authService.isAuthenticated()) {
+        await authService.refreshSession();
+      }
+    }, 30 * 60 * 1000); // 30 minutes
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load statistics from store data and apply auto-archiving
+  useEffect(() => {
+    const loadStatistics = async () => {
+      try {
+        const storeData = await import('@/data/store.json');
+        
+        // تطبيق نظام الأرشفة التلقائي
+        if (products && storeData.default.branches) {
+          const updatedProducts = updateProductArchiveStatus(products, storeData.default.branches);
+          
+          // تحديث المنتجات في المتجر إذا كانت هناك تغييرات
+          const hasChanges = updatedProducts.some((updatedProduct, index) => 
+            updatedProduct.isArchived !== products[index]?.isArchived
+          );
+          
+          if (hasChanges) {
+            // تحديث المنتجات في المتجر
+            updatedProducts.forEach(updatedProduct => {
+              updateProduct(updatedProduct);
+            });
+            
+            // إظهار إشعار بالتحديث
+            const unassignedCount = getUnassignedProductsCount(products, storeData.default.branches);
+            if (unassignedCount > 0) {
+              toast.info(`تم أرشفة ${unassignedCount} منتج تلقائياً لعدم ربطها بأي فرع`);
+            }
+          }
+        }
+        
+        setStatistics({
+          totalProducts: products?.length || 0,
+          totalRegions: storeData.default.regions?.length || 0,
+          totalBranches: storeData.default.branches?.length || 0,
+          activeOffers: products?.filter((p) => p.specialOffer).length || 0,
+          totalStreets: storeData.default.streets?.length || 0,
+          archivedProducts: products?.filter((p) => p.isArchived).length || 0,
+        });
+      } catch (error) {
+        console.warn('Failed to load store data for statistics:', error);
+        setStatistics({
+          totalProducts: products?.length || 0,
+          totalRegions: 0,
+          totalBranches: 0,
+          activeOffers: products?.filter((p) => p.specialOffer).length || 0,
+          totalStreets: 0,
+          archivedProducts: products?.filter((p) => p.isArchived).length || 0,
+        });
+      }
+    };
+
+    loadStatistics();
+  }, [products, updateProduct]);
 
   const [selectedRegionId, setSelectedRegionId] = useState<string | undefined>(undefined);
   const [selectedStreetId, setSelectedStreetId] = useState<string | undefined>(undefined);
@@ -267,16 +346,35 @@ const Admin = () => {
 
   // Memoize handlers
   const handleLogin = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
-      if (password === "4508") {
-        setIsAuthenticated(true);
-      } else {
-        toast.error("Invalid password");
+      
+      try {
+        const result = await authService.login(password);
+        
+        if (result.success) {
+          setIsAuthenticated(true);
+          setPassword("");
+          toast.success(result.message);
+        } else {
+          toast.error(result.message);
+        }
+      } catch (error) {
+        toast.error("حدث خطأ أثناء تسجيل الدخول");
       }
     },
     [password]
   );
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await authService.logout();
+      setIsAuthenticated(false);
+      toast.success("تم تسجيل الخروج بنجاح");
+    } catch (error) {
+      toast.error("حدث خطأ أثناء تسجيل الخروج");
+    }
+  }, []);
 
   const handleExport = useCallback(() => {
     try {
@@ -656,6 +754,23 @@ const Admin = () => {
       if (!response.ok) throw new Error();
       
       setBranches(updatedBranches);
+      
+      // تطبيق نظام الأرشفة التلقائي بعد تحديث الفروع
+      if (storeData.products) {
+        const updatedProducts = updateProductArchiveStatus(storeData.products, updatedBranches);
+        
+        // تحديث المنتجات في المتجر إذا كانت هناك تغييرات
+        updatedProducts.forEach(updatedProduct => {
+          updateProduct(updatedProduct);
+        });
+        
+        // إظهار إشعار بالتحديث
+        const unassignedCount = getUnassignedProductsCount(storeData.products, updatedBranches);
+        if (unassignedCount > 0) {
+          toast.info(`تم أرشفة ${unassignedCount} منتج تلقائياً لعدم ربطها بأي فرع`);
+        }
+      }
+      
       toast.success("تم تحديث منتجات الفرع بنجاح");
     } catch (error) {
       toast.error("حدث خطأ أثناء تحديث منتجات الفرع");
@@ -770,18 +885,34 @@ const Admin = () => {
           role="form"
           aria-label="Admin login form"
         >
-          <h1 className="text-2xl font-bold">Admin Login</h1>
+          <h1 className="text-2xl font-bold text-center">تسجيل دخول المسؤول</h1>
+          <p className="text-sm text-gray-600 text-center">
+            أدخل كلمة المرور للوصول إلى لوحة التحكم
+          </p>
           <Input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter password"
+            placeholder="كلمة المرور"
             aria-label="Password"
             required
+            className="text-center"
           />
           <Button type="submit" className="w-full" aria-label="Login button">
-            Login
+            تسجيل الدخول
           </Button>
+          
+          {/* معلومات الجلسة إذا كانت موجودة */}
+          {authService.getSession() && (
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm">
+              <p className="text-blue-800">
+                <strong>آخر تسجيل دخول:</strong> {new Date(authService.getSession()?.loginTime || 0).toLocaleString('ar-EG')}
+              </p>
+              <p className="text-blue-600">
+                <strong>ينتهي في:</strong> {new Date(authService.getSession()?.expiresAt || 0).toLocaleString('ar-EG')}
+              </p>
+            </div>
+          )}
         </form>
       </div>
     );
@@ -801,7 +932,20 @@ const Admin = () => {
       <main className="max-w-[90%] mx-auto py-8">
         <div className="mx-auto">
           <div className="mb-8 flex items-center justify-between">
-            <h1 className="text-3xl font-bold">{t("admin.dashboard")}</h1>
+            <div>
+              <h1 className="text-3xl font-bold">{t("admin.dashboard")}</h1>
+              {/* معلومات الجلسة */}
+              {authService.getSession() && (
+                <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                  <span>
+                    <strong>تسجيل الدخول:</strong> {new Date(authService.getSession()?.loginTime || 0).toLocaleString('ar-EG')}
+                  </span>
+                  <span>
+                    <strong>ينتهي في:</strong> {new Date(authService.getSession()?.expiresAt || 0).toLocaleString('ar-EG')}
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="flex gap-2">
               <Link to="/admin/orders">
                 <Button variant="outline" className="gap-2">
@@ -822,6 +966,14 @@ const Admin = () => {
               >
                 <Download className="h-4 w-4" aria-hidden="true" />
                 {t("admin.exportStore")}
+              </Button>
+              <Button
+                onClick={handleLogout}
+                variant="destructive"
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                تسجيل الخروج
               </Button>
             </div>
           </div>
@@ -848,16 +1000,16 @@ const Admin = () => {
             </div>
             <div className="bg-card rounded-lg border p-4 shadow-sm">
               <div className="flex items-center gap-2">
-                <Tag
+                <MapPin
                   className="h-5 w-5 text-muted-foreground"
                   aria-hidden="true"
                 />
                 <h3 className="text-sm font-medium">
-                  {t("analytics.metrics.totalCategories")}
+                  إجمالي المناطق
                 </h3>
               </div>
               <p className="text-2xl font-bold mt-2">
-                {statistics.totalCategories}
+                {statistics.totalRegions}
               </p>
             </div>
             <div className="bg-card rounded-lg border p-4 shadow-sm">
@@ -867,11 +1019,11 @@ const Admin = () => {
                   aria-hidden="true"
                 />
                 <h3 className="text-sm font-medium">
-                  {t("analytics.metrics.totalSuppliers")}
+                  إجمالي الفروع
                 </h3>
               </div>
               <p className="text-2xl font-bold mt-2">
-                {statistics.totalSuppliers}
+                {statistics.totalBranches}
               </p>
             </div>
             <div className="bg-card rounded-lg border p-4 shadow-sm">
@@ -881,11 +1033,25 @@ const Admin = () => {
                   aria-hidden="true"
                 />
                 <h3 className="text-sm font-medium">
-                  {t("analytics.metrics.activeOffers")}
+                  العروض النشطة
                 </h3>
               </div>
               <p className="text-2xl font-bold mt-2">
-                {statistics.productsWithOffers}
+                {statistics.activeOffers}
+              </p>
+            </div>
+            <div className="bg-card rounded-lg border p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <MapPin
+                  className="h-5 w-5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <h3 className="text-sm font-medium">
+                  إجمالي الشوارع
+                </h3>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {statistics.totalStreets}
               </p>
             </div>
             <div className="bg-card rounded-lg border p-4 shadow-sm">
@@ -903,6 +1069,16 @@ const Admin = () => {
               </p>
             </div>
           </div>
+
+          {/* Unassigned Products Alert */}
+          <UnassignedProductsAlert
+            products={products || []}
+            branches={branches}
+            onManageProducts={() => {
+              // يمكن إضافة منطق لفتح مدير المنتجات هنا
+              toast.info("استخدم جدول المنتجات لإدارة ربط المنتجات بالفروع");
+            }}
+          />
 
           {/* Main Content with Tabs */}
           <Tabs defaultValue="products" className="w-full">

@@ -33,6 +33,8 @@ import { DEFAULT_SUPPLIER } from "@/constants/supplier";
 import storeData from "@/data/store.json";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { updateProductArchiveStatus } from "@/utils/productUtils";
+import { parseFilterUrl, createProductsUrl } from "@/utils/urlUtils";
 
 export default function Products() {
   const { t } = useTranslation();
@@ -40,6 +42,7 @@ export default function Products() {
   const filters = useStore((state) => state.filters);
   const setFilters = useStore((state) => state.setFilters);
   const refreshProducts = useStore((state) => state.refreshProducts);
+  const applyAutoArchiving = useStore((state) => state.applyAutoArchiving);
   const [searchParams] = useSearchParams();
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -68,24 +71,30 @@ export default function Products() {
     refreshProducts();
   }, [refreshProducts]);
 
+  // تطبيق نظام الأرشفة التلقائي عند تغيير المنتجات أو الفروع
+  useEffect(() => {
+    if (products && branches.length > 0) {
+      applyAutoArchiving(branches);
+    }
+  }, [products, branches, applyAutoArchiving]);
+
   // Handle URL parameters on page load
   useEffect(() => {
-    const category = searchParams.get("category");
-    const regionId = searchParams.get("regionId");
-    const streetId = searchParams.get("streetId");
-    const branchId = searchParams.get("branchId");
+    // استخدام النظام الجديد لتحليل معاملات URL
+    const parsedFilters = parseFilterUrl(searchParams, regions, streets, branches);
+    
     setFilters({
       ...filters,
-      category: category || undefined,
-      regionId: regionId || undefined,
-      streetId: streetId || undefined,
-      branchId: branchId || undefined,
+      category: parsedFilters.category || undefined,
+      regionId: parsedFilters.regionId || undefined,
+      streetId: parsedFilters.streetId || undefined,
+      branchId: parsedFilters.branchId || undefined,
       // reset subcategory/color/size إذا لم يوجد category
-      subcategory: category ? filters.subcategory : undefined,
-      color: category ? filters.color : undefined,
-      size: category ? filters.size : undefined,
+      subcategory: parsedFilters.category ? filters.subcategory : undefined,
+      color: parsedFilters.category ? filters.color : undefined,
+      size: parsedFilters.category ? filters.size : undefined,
     });
-  }, [searchParams, setFilters]);
+  }, [searchParams, setFilters, regions, streets, branches]);
 
   // Get active products (non-archived)
   const activeProducts = useMemo(() => {

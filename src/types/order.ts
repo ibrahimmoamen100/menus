@@ -3,8 +3,13 @@ export interface OrderItem {
   productName: string;
   quantity: number;
   price: number;
+  basePrice: number;
+  sizePrice: number;
+  extraPrice: number;
   selectedSize?: string;
   selectedExtra?: string;
+  originalPrice: number;
+  discountPercentage: number;
 }
 
 export interface Order {

@@ -17,6 +17,7 @@ import { useState, useMemo } from "react";
 import { DEFAULT_SUPPLIER } from "@/constants/supplier";
 import { formatPrice } from "@/utils/format";
 import storeData from "@/data/store.json";
+import { createProductsUrl } from "@/utils/urlUtils";
 import {
   MapPin,
   Route,
@@ -68,22 +69,17 @@ export function ProductFilters({ categories: propCategories }: { categories: str
   // دوال تغيير الفلاتر
   const handleRegionChange = (value: string) => {
     const newRegionId = value === "all" ? undefined : value;
-    setFilters({
+    const newFilters = {
       ...filters,
       regionId: newRegionId,
       streetId: undefined,
       branchId: undefined,
-    });
-    // تحديث الرابط
-    const params = new URLSearchParams(window.location.search);
-    if (newRegionId) {
-      params.set("regionId", newRegionId);
-    } else {
-      params.delete("regionId");
-    }
-    params.delete("streetId");
-    params.delete("branchId");
-    navigate(`/products?${params.toString()}`);
+    };
+    setFilters(newFilters);
+    
+    // تحديث الرابط باستخدام النظام الجديد
+    const newUrl = createProductsUrl(newFilters, regions, streets, branches);
+    navigate(newUrl);
   };
   const handleStreetChange = (value: string) => {
     const newStreetId = value === "all" ? undefined : value;
@@ -95,26 +91,17 @@ export function ProductFilters({ categories: propCategories }: { categories: str
         newRegionId = streetObj.regionId;
       }
     }
-    setFilters({
+    const newFilters = {
       ...filters,
       streetId: newStreetId,
       branchId: undefined,
       regionId: newRegionId,
-    });
-    // تحديث الرابط
-    const params = new URLSearchParams(window.location.search);
-    if (newStreetId) {
-      params.set("streetId", newStreetId);
-    } else {
-      params.delete("streetId");
-    }
-    params.delete("branchId");
-    if (newRegionId) {
-      params.set("regionId", newRegionId);
-    } else {
-      params.delete("regionId");
-    }
-    navigate(`/products?${params.toString()}`);
+    };
+    setFilters(newFilters);
+    
+    // تحديث الرابط باستخدام النظام الجديد
+    const newUrl = createProductsUrl(newFilters, regions, streets, branches);
+    navigate(newUrl);
   };
   const handleBranchChange = (value: string) => {
     const newBranchId = value === "all" ? undefined : value;
@@ -135,30 +122,17 @@ export function ProductFilters({ categories: propCategories }: { categories: str
         }
       }
     }
-    setFilters({
+    const newFilters = {
       ...filters,
       branchId: newBranchId,
       streetId: newStreetId,
       regionId: newRegionId,
-    });
-    // تحديث الرابط
-    const params = new URLSearchParams(window.location.search);
-    if (newBranchId) {
-      params.set("branchId", newBranchId);
-    } else {
-      params.delete("branchId");
-    }
-    if (newStreetId) {
-      params.set("streetId", newStreetId);
-    } else {
-      params.delete("streetId");
-    }
-    if (newRegionId) {
-      params.set("regionId", newRegionId);
-    } else {
-      params.delete("regionId");
-    }
-    navigate(`/products?${params.toString()}`);
+    };
+    setFilters(newFilters);
+    
+    // تحديث الرابط باستخدام النظام الجديد
+    const newUrl = createProductsUrl(newFilters, regions, streets, branches);
+    navigate(newUrl);
   };
 
   // تحديث منطق تصفية المنتجات ليأخذ جميع الفلاتر المختارة معًا (AND)
@@ -288,16 +262,16 @@ export function ProductFilters({ categories: propCategories }: { categories: str
   // Reset dependent filters when category changes
   const handleCategoryChange = (value: string) => {
     const newCategory = value === "all" ? undefined : value;
-    setFilters({
+    const newFilters = {
       ...filters,
       category: newCategory,
       subcategory: undefined, // Reset subcategory only
-    });
+    };
+    setFilters(newFilters);
 
-    // Update URL فقط عند اختيار فئة محددة
-    if (newCategory) {
-      navigate(`/products?category=${newCategory}`);
-    }
+    // تحديث الرابط باستخدام النظام الجديد
+    const newUrl = createProductsUrl(newFilters, regions, streets, branches);
+    navigate(newUrl);
   };
 
   // Reset dependent filters when subcategory changes
@@ -309,14 +283,18 @@ export function ProductFilters({ categories: propCategories }: { categories: str
   };
 
   const clearAllFilters = () => {
-    setFilters({
+    const newFilters = {
       category: undefined,
       subcategory: undefined,
       supplier: undefined,
       minPrice: undefined,
       maxPrice: undefined,
       sortBy: undefined,
-    });
+      regionId: undefined,
+      streetId: undefined,
+      branchId: undefined,
+    };
+    setFilters(newFilters);
     // Reset URL parameters
     navigate("/products");
   };

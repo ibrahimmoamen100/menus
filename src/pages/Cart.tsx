@@ -137,32 +137,52 @@ const Cart = () => {
 
   // Debug: طباعة محتوى السلة والمنتجات والربط بينهم
   useEffect(() => {
-    console.log("[DEBUG] cart:", cart);
-    console.log("[DEBUG] products:", products);
-    console.log("[DEBUG] cartWithProducts:", cartWithProducts);
+    
   }, [cart, products, cartWithProducts]);
 
   // Group cart items by branch
   const branchGroups = cartWithProducts.reduce((groups: any[], item) => {
     // ابحث عن الفرع الذي يحتوي المنتج
     const branch = (storeData.branches || []).find((b) => (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === item.product.id));
-    const price = item.product.specialOffer && item.product.discountPercentage
+    // حساب السعر الأساسي مع الخصم
+    const basePrice = item.product.specialOffer && item.product.discountPercentage
       ? item.product.price - (item.product.price * item.product.discountPercentage) / 100
       : item.product.price;
+    
+    // حساب سعر الحجم
+    let sizePrice = 0;
+    if (item.selectedSize && item.product.sizesWithPrices) {
+      const foundSize = item.product.sizesWithPrices.find(
+        (s: any) => s.size === item.selectedSize
+      );
+      if (foundSize) sizePrice = Number(foundSize.price || 0);
+    }
+    
+    // حساب سعر الإضافة
+    let extraPrice = 0;
+    if (item.selectedExtra && item.product.extras) {
+      const foundExtra = item.product.extras.find(
+        (e: any) => e.name === item.selectedExtra
+      );
+      if (foundExtra) extraPrice = Number(foundExtra.price || 0);
+    }
+    
+    // السعر الإجمالي للمنتج الواحد (يشمل الحجم والإضافة)
+    const totalItemPrice = basePrice + sizePrice + extraPrice;
 
     if (!branch) {
       // إذا لم يكن للمنتج فرع، أضفه إلى مجموعة "منتجات عامة"
       const generalGroup = groups.find((g) => g.branch?.id === "general");
       if (generalGroup) {
         generalGroup.items.push(item);
-        generalGroup.total += price * item.quantity;
+        generalGroup.total += totalItemPrice * item.quantity;
       } else {
         groups.push({
           branch: { id: "general", name: "منتجات عامة", phone: "01024911062" },
           street: null,
           region: null,
           items: [item],
-          total: price * item.quantity,
+          total: totalItemPrice * item.quantity,
         });
       }
       return groups;
@@ -173,14 +193,14 @@ const Cart = () => {
     const existingGroup = groups.find((g) => g.branch.id === branch.id);
     if (existingGroup) {
       existingGroup.items.push(item);
-      existingGroup.total += price * item.quantity;
+      existingGroup.total += totalItemPrice * item.quantity;
     } else {
       groups.push({
         branch,
         street,
         region,
         items: [item],
-        total: price * item.quantity,
+        total: totalItemPrice * item.quantity,
       });
     }
     return groups;
@@ -188,7 +208,7 @@ const Cart = () => {
 
   // Debug: طباعة مجموعات الفروع
   useEffect(() => {
-    console.log("[DEBUG] branchGroups:", branchGroups);
+  
   }, [branchGroups]);
 
   const handleDeleteClick = (productId: string) => {
@@ -228,13 +248,10 @@ const Cart = () => {
 
   // دالة التحقق عند الضغط على زر شراء من هذا الفرع
   const handleBuyFromBranch = async (group: any) => {
-    console.log("[DEBUG] handleBuyFromBranch called with group:", group);
+
     
     const valid = await trigger(["fullName", "phoneNumber", "address", "city"]);
-    console.log("[DEBUG] Form validation result:", valid);
-    
     if (!valid) {
-      console.log("[DEBUG] Form validation failed, errors:", errors);
       // عمل focus على أول حقل غير مكتمل
       if (errors.fullName && fullNameRef.current) {
         fullNameRef.current.focus();
@@ -258,8 +275,7 @@ const Cart = () => {
 
     // إذا كانت الحقول مكتملة، احفظ الطلب في Firebase أولاً
     const values = getValues();
-    console.log("[DEBUG] Form values:", values);
-    console.log("[DEBUG] Group data:", group);
+
     
     try {
       const orderData = {
@@ -267,32 +283,70 @@ const Cart = () => {
         customerPhone: values.phoneNumber,
         customerAddress: `${values.address}, ${values.city}`,
         selectedBranch: group.branch.name,
-        items: group.items.map((item: any) => ({
-          productId: item.product.id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: (item.product.price +
-            (item.selectedSize && item.product.sizesWithPrices
-              ? Number(
-                item.product.sizesWithPrices.find(
-                  (s: any) => s.size === item.selectedSize
-                )?.price || 0
-              )
-              : 0
-            ) +
-            (item.selectedExtra && item.product.extras
-              ? Number(
-                item.product.extras.find(
-                  (e: any) => e.name === item.selectedExtra
-                )?.price || 0
-              )
-              : 0
-            )
-          ),
-          selectedSize: item.selectedSize,
-          selectedExtra: item.selectedExtra,
-        })),
-        totalAmount: group.total,
+        items: group.items.map((item: any) => {
+          // حساب السعر الأساسي مع مراعاة الخصم
+          const basePrice = item.product.specialOffer && item.product.discountPercentage
+            ? item.product.price - (item.product.price * item.product.discountPercentage) / 100
+            : item.product.price;
+          
+          // حساب سعر الحجم
+          let sizePrice = 0;
+          if (item.selectedSize && item.product.sizesWithPrices) {
+            const foundSize = item.product.sizesWithPrices.find(
+              (s: any) => s.size === item.selectedSize
+            );
+            if (foundSize) sizePrice = Number(foundSize.price || 0);
+          }
+          
+          // حساب سعر الإضافة
+          let extraPrice = 0;
+          if (item.selectedExtra && item.product.extras) {
+            const foundExtra = item.product.extras.find(
+              (e: any) => e.name === item.selectedExtra
+            );
+            if (foundExtra) extraPrice = Number(foundExtra.price || 0);
+          }
+          
+          // السعر الإجمالي للمنتج الواحد
+          const totalItemPrice = basePrice + sizePrice + extraPrice;
+          
+          return {
+            productId: item.product.id,
+            productName: item.product.name,
+            quantity: item.quantity,
+            price: totalItemPrice,
+            basePrice: basePrice,
+            sizePrice: sizePrice,
+            extraPrice: extraPrice,
+            selectedSize: item.selectedSize,
+            selectedExtra: item.selectedExtra,
+            originalPrice: item.product.price,
+            discountPercentage: item.product.discountPercentage || 0,
+          };
+        }),
+        totalAmount: group.items.reduce((sum, item) => {
+          const basePrice = item.product.specialOffer && item.product.discountPercentage
+            ? item.product.price - (item.product.price * item.product.discountPercentage) / 100
+            : item.product.price;
+          
+          let sizePrice = 0;
+          if (item.selectedSize && item.product.sizesWithPrices) {
+            const foundSize = item.product.sizesWithPrices.find(
+              (s: any) => s.size === item.selectedSize
+            );
+            if (foundSize) sizePrice = Number(foundSize.price || 0);
+          }
+          
+          let extraPrice = 0;
+          if (item.selectedExtra && item.product.extras) {
+            const foundExtra = item.product.extras.find(
+              (e: any) => e.name === item.selectedExtra
+            );
+            if (foundExtra) extraPrice = Number(foundExtra.price || 0);
+          }
+          
+          return sum + (basePrice + sizePrice + extraPrice) * item.quantity;
+        }, 0),
         status: "pending" as const,
         notes: values.notes,
       };
@@ -303,13 +357,7 @@ const Cart = () => {
         currentTime: new Date().toLocaleString("ar-EG")
       });
 
-      console.log("[DEBUG] Creating order with data:", orderData);
-      console.log("[DEBUG] orderService available:", !!orderService);
-      console.log("[DEBUG] orderService.createOrder available:", !!orderService.createOrder);
-
       const orderId = await orderService.createOrder(orderData);
-
-      console.log("[DEBUG] Order created successfully with ID:", orderId);
       toast.success("تم حفظ الطلب بنجاح! جاري فتح الواتساب...");
       
       // إزالة المنتجات من هذا الفرع من السلة
@@ -318,25 +366,21 @@ const Cart = () => {
       });
       
     } catch (e) {
-      console.error("[DEBUG] Error creating order:", e);
-      console.error("[DEBUG] Error details:", {
-        name: e.name,
-        message: e.message,
-        stack: e.stack
-      });
       toast.error("تعذر حفظ الطلب على السحابة");
       return;
     }
 
     // إرسال رسالة الواتساب
     const deliveryInfoMsg =
-      `معلومات التوصيل:\n` +
-      `الاسم: ${values.fullName}\n` +
-      `رقم الهاتف: ${values.phoneNumber}\n` +
-      `العنوان: ${values.address}\n` +
-      `المنطقه: ${values.city}` +
-      (values.notes ? `\nملاحظات: ${values.notes}` : "");
-    const separator = "-----------------------------";
+      `📋 *معلومات التوصيل:*\n` +
+      `👤 الاسم: ${values.fullName}\n` +
+      `📞 رقم الهاتف: ${values.phoneNumber}\n` +
+      `📍 العنوان: ${values.address}\n` +
+      `🏘️ المنطقة: ${values.city}` +
+      (values.notes ? `\n📝 ملاحظات: ${values.notes}` : "");
+    
+    const separator = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+    
     // إضافة التاريخ والوقت الحاليين بالميلادي وبالعربية وصيغة مخصصة
     const now = new Date();
     const days = [
@@ -347,6 +391,7 @@ const Cart = () => {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
     const formattedDate = `${dayName} ${day}-${month}-${year}`;
+    
     // إضافة الوقت بصيغة 12 ساعة وبالأرقام العربية
     let hours = now.getHours();
     const minutes = now.getMinutes();
@@ -356,44 +401,58 @@ const Cart = () => {
     // تحويل الأرقام إلى العربية
     const toArabicDigits = (num) => num.toString().replace(/[0-9]/g, d => String.fromCharCode(0x0660 + Number(d)));
     const formattedTime = `${toArabicDigits(displayHours)}:${toArabicDigits(minutes.toString().padStart(2, '0'))} ${isAM ? 'ص' : 'م'}`;
+    
     const msg =
-      `طلب جديد من ${group.branch.name}` +
-      (group.street ? `\nشارع ${group.street.name}` : "") +
-      (group.region ? `\nمنطقة ${group.region.name}` : "") +
-      `\n${separator}\n` +
+      `🛒 *طلب جديد*\n` +
+      `🏪 من: ${group.branch.name}` +
+      (group.street ? `\n🛣️ شارع: ${group.street.name}` : "") +
+      (group.region ? `\n🏘️ منطقة: ${group.region.name}` : "") +
+      `\n\n${separator}\n\n` +
       deliveryInfoMsg +
-      `\n${separator}\n` +
+      `\n\n${separator}\n\n` +
+      `🍽️ *المنتجات المطلوبة:*\n` +
       group.items
         .map(
-          (item: any) =>
-            `- ${item.product.name} x${item.quantity} = ${formatPrice(
-              (item.product.price +
-                (item.selectedSize && item.product.sizesWithPrices
-                  ? Number(
-                    item.product.sizesWithPrices.find(
-                      (s: any) => s.size === item.selectedSize
-                    )?.price || 0
-                  )
-                  : 0
-                ) +
-                (item.selectedExtra && item.product.extras
-                  ? Number(
-                    item.product.extras.find(
-                      (e: any) => e.name === item.selectedExtra
-                    )?.price || 0
-                  )
-                  : 0
+          (item: any) => {
+            const itemPrice = (item.product.price +
+              (item.selectedSize && item.product.sizesWithPrices
+                ? Number(
+                  item.product.sizesWithPrices.find(
+                    (s: any) => s.size === item.selectedSize
+                  )?.price || 0
                 )
-              ) * item.quantity
-            )}`
+                : 0
+              ) +
+              (item.selectedExtra && item.product.extras
+                ? Number(
+                  item.product.extras.find(
+                    (e: any) => e.name === item.selectedExtra
+                  )?.price || 0
+                )
+                : 0
+              )
+            ) * item.quantity;
+            
+            let itemDetails = `• ${item.product.name} × ${item.quantity}`;
+            if (item.selectedSize) {
+              itemDetails += ` (${item.selectedSize})`;
+            }
+            if (item.selectedExtra) {
+              itemDetails += ` + ${item.selectedExtra}`;
+            }
+            itemDetails += ` = ${formatPrice(itemPrice)}`;
+            
+            return itemDetails;
+          }
         )
         .join("\n") +
-      `\n${separator}\n` +
-      `الإجمالي: ${formatPrice(group.total)}` +
-      `\n${separator}\n` +
-      `تاريخ الطلب: ${formattedDate}` +
-      `\n${formattedTime}` +
-      `\nأرسل من خلال موقع Menus`;
+      `\n\n${separator}\n\n` +
+      `💰 *الإجمالي: ${formatPrice(group.total)} جنيه*` +
+      `\n\n${separator}\n\n` +
+      `📅 تاريخ الطلب: ${formattedDate}` +
+      `\n⏰ الوقت: ${formattedTime}` +
+      `\n\n${separator}\n\n` +
+      `🌐 *أرسل من خلال موقع Menus*`;
     
     // فتح الواتساب بعد ثانية واحدة لإعطاء الوقت لرسالة النجاح
     setTimeout(() => {
@@ -408,59 +467,6 @@ const Cart = () => {
       <main className="container py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">{t("cart.title")}</h1>
-          <div className="flex gap-2">
-            <Button 
-              onClick={async () => {
-                try {
-                  console.log("[DEBUG] Creating test order from Cart...");
-                  const testOrder = await orderService.createOrder({
-                    customerName: "اختبار من السلة",
-                    customerPhone: "01000000000",
-                    customerAddress: "عنوان اختبار",
-                    selectedBranch: "فرع اختبار",
-                    items: [{
-                      productId: "test-cart",
-                      productName: "منتج اختبار من السلة",
-                      quantity: 1,
-                      price: 25
-                    }],
-                    totalAmount: 25,
-                    status: "pending"
-                  });
-                  console.log("[DEBUG] Test order from Cart created:", testOrder);
-                  toast.success("تم إنشاء طلب اختبار من السلة!");
-                } catch (error) {
-                  console.error("[DEBUG] Test order from Cart failed:", error);
-                  toast.error("فشل في إنشاء طلب اختبار من السلة");
-                }
-              }}
-              variant="outline"
-              size="sm"
-            >
-              اختبار إنشاء طلب
-            </Button>
-            <Button 
-              onClick={async () => {
-                try {
-                  console.log("[DEBUG] Testing Firebase connection...");
-                  const result = await orderService.testConnection();
-                  console.log("[DEBUG] Firebase test result:", result);
-                  if (result.success) {
-                    toast.success("Firebase متصل بنجاح!");
-                  } else {
-                    toast.error(`Firebase غير متصل: ${result.error}`);
-                  }
-                } catch (error) {
-                  console.error("[DEBUG] Firebase test failed:", error);
-                  toast.error("فشل في اختبار Firebase");
-                }
-              }}
-              variant="outline"
-              size="sm"
-            >
-              اختبار Firebase
-            </Button>
-          </div>
           {cart.length > 0 && (
             <AlertDialog
               open={showClearCartAlert}

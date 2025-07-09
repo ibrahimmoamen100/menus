@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Eye,
@@ -36,6 +37,11 @@ import {
   BarChart3,
   Calendar,
   Activity,
+  UserPlus,
+  UserCheck,
+  ArrowUpRight,
+  FileText,
+  Trash2,
 } from "lucide-react";
 
 export default function Analytics() {
@@ -98,6 +104,12 @@ export default function Analytics() {
     return `${mins} دقيقة`;
   };
 
+  const formatHour = (hour: number) => {
+    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    const period = hour < 12 ? 'ص' : 'م';
+    return `${hour12}:00 ${period}`;
+  };
+
   const getTimeFilterLabel = (filter: string) => {
     switch (filter) {
       case "today":
@@ -122,25 +134,39 @@ export default function Analytics() {
               {t("analytics.description")}
             </p>
           </div>
-          <Select value={timeFilter} onValueChange={setTimeFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                {t("analytics.timeFilters.all")}
-              </SelectItem>
-              <SelectItem value="today">
-                {t("analytics.timeFilters.today")}
-              </SelectItem>
-              <SelectItem value="week">
-                {t("analytics.timeFilters.week")}
-              </SelectItem>
-              <SelectItem value="month">
-                {t("analytics.timeFilters.month")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                analyticsService.resetData();
+                window.location.reload();
+              }}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              إعادة تعيين البيانات
+            </Button>
+            <Select value={timeFilter} onValueChange={setTimeFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t("analytics.timeFilters.all")}
+                </SelectItem>
+                <SelectItem value="today">
+                  {t("analytics.timeFilters.today")}
+                </SelectItem>
+                <SelectItem value="week">
+                  {t("analytics.timeFilters.week")}
+                </SelectItem>
+                <SelectItem value="month">
+                  {t("analytics.timeFilters.month")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* البطاقات الإحصائية */}
@@ -214,6 +240,77 @@ export default function Analytics() {
           </Card>
         </div>
 
+        {/* بطاقات إضافية */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("analytics.stats.newVisitors")}
+              </CardTitle>
+              <UserPlus className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {analytics.newVisitors}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                زوار جدد
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {t("analytics.stats.returningVisitors")}
+              </CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {analytics.returningVisitors}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                زوار عائدون
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                معدل الارتداد
+              </CardTitle>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">
+                {analytics.bounceRate.toFixed(1)}%
+              </div>
+              <p className="text-xs text-muted-foreground">
+                زوار صفحة واحدة
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                متوسط الصفحات
+              </CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">
+                {analytics.avgPagesPerSession.toFixed(1)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                لكل جلسة
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* تفاصيل الزوار */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
@@ -278,7 +375,7 @@ export default function Analytics() {
                       className="flex items-center justify-between"
                     >
                       <span className="text-sm">
-                        {hourData.hour.toString().padStart(2, "0")}:00
+                        {hourData.label}
                       </span>
                       <div className="flex items-center gap-2">
                         <div className="w-20 bg-gray-200 rounded-full h-2">
@@ -469,9 +566,7 @@ export default function Analytics() {
                           .reduce((max, current) =>
                             current.visitors > max.visitors ? current : max
                           )
-                          .hour.toString()
-                          .padStart(2, "0")}
-                        :00
+                          .label}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">

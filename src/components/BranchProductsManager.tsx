@@ -112,7 +112,10 @@ export const BranchProductsManager: React.FC<BranchProductsManagerProps> = ({
       const branch = branches.find(b => b.id === selectedBranchId);
       if (branch) {
         setSelectedBranch(branch);
-        setIsDialogOpen(true);
+        // Open dialog after a short delay to ensure proper initialization
+        setTimeout(() => {
+          setIsDialogOpen(true);
+        }, 100);
       }
     }
   }, [selectedBranchId, branches]);
@@ -292,7 +295,11 @@ export const BranchProductsManager: React.FC<BranchProductsManagerProps> = ({
       )}
 
       {/* Products Selection Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCancel();
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center">

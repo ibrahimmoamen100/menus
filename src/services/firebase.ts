@@ -10,6 +10,8 @@ import {
   orderBy,
   query,
   onSnapshot,
+  deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { Order } from "@/types/order";
 
@@ -30,7 +32,7 @@ const db = getFirestore(app);
 const analytics = getAnalytics(app);
 
 // دالة مساعدة لتنظيف البيانات من القيم undefined
-const cleanOrderData = (orderData: Omit<Order, "id" | "createdAt" | "updatedAt">) => {
+  const cleanOrderData = (orderData: Omit<Order, "id" | "createdAt" | "updatedAt">) => {
   return {
     customerName: orderData.customerName || "",
     customerPhone: orderData.customerPhone || "",
@@ -41,8 +43,13 @@ const cleanOrderData = (orderData: Omit<Order, "id" | "createdAt" | "updatedAt">
       productName: item.productName || "",
       quantity: item.quantity || 0,
       price: item.price || 0,
+      basePrice: item.basePrice || 0,
+      sizePrice: item.sizePrice || 0,
+      extraPrice: item.extraPrice || 0,
       selectedSize: item.selectedSize || null,
       selectedExtra: item.selectedExtra || null,
+      originalPrice: item.originalPrice || 0,
+      discountPercentage: item.discountPercentage || 0,
     })),
     totalAmount: orderData.totalAmount || 0,
     status: orderData.status || "pending",
@@ -52,12 +59,40 @@ const cleanOrderData = (orderData: Omit<Order, "id" | "createdAt" | "updatedAt">
 
 // دوال إدارة الطلبات
 export const orderService = {
+  // مسح جميع الطلبات
+  async clearAllOrders(): Promise<void> {
+    try {
+  
+      
+      // جلب جميع الطلبات
+      const q = query(collection(db, "orders"));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+
+        return;
+      }
+      
+      // استخدام batch delete لحذف جميع الطلبات
+      const batch = writeBatch(db);
+      querySnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      
+    } catch (error) {
+      console.error("[DEBUG] Error clearing orders from Firebase:", error);
+      throw error;
+    }
+  },
+
   // إضافة طلب جديد
   async createOrder(
     orderData: Omit<Order, "id" | "createdAt" | "updatedAt">
   ): Promise<string> {
     try {
-      console.log("[DEBUG] Attempting to create order in Firebase:", orderData);
+
       
       // تنظيف البيانات من القيم undefined
       const cleanedData = cleanOrderData(orderData);
@@ -68,12 +103,10 @@ export const orderService = {
         updatedAt: new Date(),
       };
 
-      console.log("[DEBUG] Cleaned order data:", cleanedData);
-      console.log("[DEBUG] Order with timestamps:", orderWithTimestamps);
-      console.log("[DEBUG] About to call addDoc...");
+      
 
       const docRef = await addDoc(collection(db, "orders"), orderWithTimestamps);
-      console.log("[DEBUG] Firebase document created with ID:", docRef.id);
+      
       return docRef.id;
     } catch (error) {
       console.error("[DEBUG] Error creating order in Firebase:", error);
@@ -86,22 +119,21 @@ export const orderService = {
       
       // التحقق من نوع الخطأ
       if (error instanceof Error) {
-        console.log("[DEBUG] Error type:", error.name);
-        console.log("[DEBUG] Error message:", error.message);
+
         
         // إذا كان الخطأ بسبب حظر الاتصال
         if (error.message.includes('ERR_BLOCKED_BY_CLIENT') || 
             error.message.includes('network') ||
             error.message.includes('connection') ||
             error.message.includes('Could not establish connection')) {
-          console.log("[DEBUG] Firebase connection blocked, using localStorage fallback");
+
         }
       }
       
-      console.log("[DEBUG] Falling back to localStorage...");
+      
       // Fallback to localStorage if Firebase fails
       const localId = this.createOrderLocal(orderData);
-      console.log("[DEBUG] Local order created with ID:", localId);
+      
       return localId;
     }
   },
@@ -150,38 +182,46 @@ export const orderService = {
   // الاستماع للتغييرات في الوقت الفعلي
   subscribeToOrders(callback: (orders: Order[]) => void) {
     try {
-      console.log("[DEBUG] Setting up Firebase subscription...");
+
       const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
       
       const unsubscribe = onSnapshot(q, 
         (querySnapshot) => {
-          console.log("[DEBUG] Firebase snapshot received:", querySnapshot.docs.length, "documents");
+  
           const orders = querySnapshot.docs.map((doc) => {
             const data = doc.data();
             return {
               id: doc.id,
               ...data,
-              // تحويل Timestamp إلى Date
+              // تحويل Timestamp إلى Date وإضافة الحقول الجديدة للطلبات القديمة
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
               updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : data.updatedAt,
+              items: data.items?.map((item: any) => ({
+                ...item,
+                basePrice: item.basePrice || item.price || 0,
+                sizePrice: item.sizePrice || 0,
+                extraPrice: item.extraPrice || 0,
+                originalPrice: item.originalPrice || item.price || 0,
+                discountPercentage: item.discountPercentage || 0,
+              })) || []
             };
           }) as Order[];
-          console.log("[DEBUG] Processed orders:", orders);
+          
           callback(orders);
         },
         (error) => {
           console.error("Firebase subscription error:", error);
-          console.log("[DEBUG] Falling back to localStorage polling...");
+  
           // Fallback to localStorage polling
           return this.subscribeToOrdersLocal(callback);
         }
       );
       
-      console.log("[DEBUG] Firebase subscription set up successfully");
+      
       return unsubscribe;
     } catch (error) {
       console.error("Error setting up Firebase subscription:", error);
-      console.log("[DEBUG] Falling back to localStorage polling due to setup error...");
+      
       // Fallback to localStorage polling
       return this.subscribeToOrdersLocal(callback);
     }
@@ -237,11 +277,19 @@ export const orderService = {
       if (!ordersJson) return [];
       
       const orders = JSON.parse(ordersJson);
-      // تحويل التواريخ من النص إلى Date objects
+      // تحويل التواريخ من النص إلى Date objects وإضافة الحقول الجديدة للطلبات القديمة
       return orders.map((order: any) => ({
         ...order,
         createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
         updatedAt: order.updatedAt ? new Date(order.updatedAt) : new Date(),
+        items: order.items.map((item: any) => ({
+          ...item,
+          basePrice: item.basePrice || item.price || 0,
+          sizePrice: item.sizePrice || 0,
+          extraPrice: item.extraPrice || 0,
+          originalPrice: item.originalPrice || item.price || 0,
+          discountPercentage: item.discountPercentage || 0,
+        }))
       }));
     } catch {
       return [];
@@ -259,7 +307,7 @@ export const orderService = {
   // دالة لفحص حالة الاتصال بـ Firebase
   async testConnection(): Promise<{ success: boolean; error?: string; blocked?: boolean }> {
     try {
-      console.log("[DEBUG] Testing Firebase connection...");
+
       
       // محاولة إنشاء مستند اختبار في مجموعة orders
       const testOrder = {
@@ -272,8 +320,13 @@ export const orderService = {
           productName: "منتج اختبار الاتصال",
           quantity: 1,
           price: 10,
+          basePrice: 10,
+          sizePrice: 0,
+          extraPrice: 0,
           selectedSize: null,
-          selectedExtra: null
+          selectedExtra: null,
+          originalPrice: 10,
+          discountPercentage: 0
         }],
         totalAmount: 10,
         status: "pending",
@@ -283,7 +336,7 @@ export const orderService = {
       };
       
       const docRef = await addDoc(collection(db, "orders"), testOrder);
-      console.log("[DEBUG] Test order created in orders collection:", docRef.id);
+      
       
       return { success: true };
     } catch (error) {

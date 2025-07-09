@@ -15,6 +15,7 @@ import StreetBranchesManager from './StreetBranchesManager';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { textToSlug } from "@/utils/urlUtils";
 
 // بيانات شوارع المرج (يمكن لاحقًا جلبها من store.json أو props)
 const streets = [
@@ -71,7 +72,7 @@ export const StreetsCarousel = () => {
                 <motion.div
                   whileHover={{ scale: 1.03 }}
                   className="group relative h-32 rounded-xl overflow-hidden cursor-pointer bg-primary/10 flex items-center justify-center"
-                  onClick={() => navigate(`/products?street=${street.id}`)}
+                  onClick={() => navigate(`/products?street=${textToSlug(street.name)}`)}
                 >
                   <span className="text-xl font-bold text-primary drop-shadow-lg">{street.name}</span>
                 </motion.div>

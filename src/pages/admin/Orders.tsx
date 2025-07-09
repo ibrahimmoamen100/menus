@@ -33,6 +33,7 @@ import {
   BarChart3,
   Calendar,
   MapPin,
+  Trash2,
 } from "lucide-react";
 
 const Orders = () => {
@@ -42,6 +43,33 @@ const Orders = () => {
   const [branchFilter, setBranchFilter] = useState<string>("all");
   const [timeFilter, setTimeFilter] = useState<string>("all");
   const [isUsingLocalStorage, setIsUsingLocalStorage] = useState(false);
+  const [isClearingData, setIsClearingData] = useState(false);
+
+  // دالة لمسح جميع البيانات
+  const clearAllData = async () => {
+    if (!confirm("هل أنت متأكد من رغبتك في مسح جميع الطلبات؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+      return;
+    }
+
+    setIsClearingData(true);
+    try {
+      // مسح البيانات من Firebase
+      await orderService.clearAllOrders();
+      
+      // مسح البيانات من localStorage
+      localStorage.removeItem("orders");
+      
+      // إعادة تعيين حالة الطلبات
+      setOrders([]);
+      
+      toast.success("تم مسح جميع الطلبات بنجاح!");
+    } catch (error) {
+      console.error("Error clearing orders:", error);
+      toast.error("حدث خطأ أثناء مسح البيانات");
+    } finally {
+      setIsClearingData(false);
+    }
+  };
 
   // الحصول على بيانات المناطق والشوارع
   const regions = initialData?.regions || [];
@@ -71,7 +99,7 @@ const Orders = () => {
     try {
       // التحقق من صحة التاريخ
       if (!date) {
-        console.log("[DEBUG] Date is null or undefined:", date);
+    
         return "تاريخ غير محدد";
       }
       
@@ -80,7 +108,7 @@ const Orders = () => {
       
       // التحقق من صحة التاريخ بعد التحويل
       if (isNaN(orderDate.getTime())) {
-        console.log("[DEBUG] Invalid date after conversion:", date, orderDate);
+
         return "تاريخ غير محدد";
       }
       
@@ -88,12 +116,7 @@ const Orders = () => {
       const diffTime = Math.abs(now.getTime() - orderDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
-      console.log("[DEBUG] Formatting date:", {
-        original: date,
-        converted: orderDate,
-        diffDays: diffDays,
-        isValid: !isNaN(orderDate.getTime())
-      });
+
       
       if (diffDays === 1) {
         return "اليوم " + orderDate.toLocaleTimeString("ar-EG", { 
@@ -115,17 +138,17 @@ const Orders = () => {
         });
       }
     } catch (error) {
-      console.error("[DEBUG] Error formatting date:", error, date);
+
       return "تاريخ غير محدد";
     }
   };
 
   useEffect(() => {
-    console.log("[DEBUG] Setting up orders subscription...");
+
     
     // الاشتراك في التحديثات المباشرة من firebase
     const unsubscribe = orderService.subscribeToOrders((newOrders) => {
-      console.log("[DEBUG] Received orders update:", newOrders);
+
       
       // التحقق من وجود طلبات جديدة
       if (newOrders.length > orders.length) {
@@ -139,24 +162,24 @@ const Orders = () => {
 
     // التحقق من نوع الاشتراك لتحديد مصدر البيانات
     if (typeof unsubscribe !== 'function') {
-      console.log("[DEBUG] Using localStorage fallback");
+
       setIsUsingLocalStorage(true);
       toast.info("يتم استخدام البيانات المحلية. تحقق من إعدادات Firebase.");
     } else {
-      console.log("[DEBUG] Using Firebase real-time subscription");
+
     }
 
     // إضافة معالج الأخطاء
     if (typeof unsubscribe === 'function') {
       return () => {
-        console.log("[DEBUG] Cleaning up Firebase subscription");
+
         unsubscribe();
       };
     } else {
       // إذا كان unsubscribe ليس دالة، فهذا يعني أننا نستخدم localStorage
       return () => {
         if (unsubscribe && typeof unsubscribe === 'function') {
-          console.log("[DEBUG] Cleaning up localStorage subscription");
+
           unsubscribe();
         }
       };
@@ -198,7 +221,7 @@ const Orders = () => {
     // إحصائيات عامة
     const totalOrders = filteredOrders.length;
     const totalRevenue = filteredOrders.reduce(
-      (sum, order) => sum + order.totalAmount,
+      (sum, order) => sum + order.items.reduce((s, item) => s + (item.price * item.quantity), 0),
       0
     );
     const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -235,13 +258,14 @@ const Orders = () => {
 
     // أكثر الفروع نشاطاً
     const branchStats = filteredOrders.reduce((acc, order) => {
+      const branchRevenue = order.items.reduce((s, item) => s + (item.price * item.quantity), 0);
       if (acc[order.selectedBranch]) {
         acc[order.selectedBranch].count += 1;
-        acc[order.selectedBranch].revenue += order.totalAmount;
+        acc[order.selectedBranch].revenue += branchRevenue;
       } else {
         acc[order.selectedBranch] = {
           count: 1,
-          revenue: order.totalAmount,
+          revenue: branchRevenue,
           name: order.selectedBranch,
         };
       }
@@ -320,82 +344,14 @@ const Orders = () => {
           <h1 className="text-3xl font-bold">إدارة الطلبات</h1>
           <div className="flex gap-2">
             <Button 
-              onClick={async () => {
-                try {
-                  const result = await orderService.testConnection();
-                  if (result.success) {
-                    toast.success("تم إنشاء طلب اختبار في Firebase!");
-                  } else if (result.blocked) {
-                    toast.error("Firebase محظور بواسطة إضافة في المتصفح. استخدم LocalStorage.");
-                  } else {
-                    toast.error(`فشل الاتصال: ${result.error}`);
-                  }
-                } catch (error) {
-                  console.error("[DEBUG] Connection test failed:", error);
-                  toast.error("فشل في اختبار الاتصال");
-                }
-              }}
-              variant="outline"
+              onClick={clearAllData}
+              disabled={isClearingData}
+              variant="destructive"
               size="sm"
+              className="text-white hover:text-white"
             >
-              إنشاء طلب اختبار
-            </Button>
-            <Button 
-              onClick={async () => {
-                try {
-                  const status = await orderService.checkNetworkStatus();
-                  console.log("[DEBUG] Network status:", status);
-                  
-                  if (status.online && status.firebaseAccessible) {
-                    toast.success("الاتصال بالإنترنت و Firebase يعملان بشكل صحيح");
-                  } else if (!status.online) {
-                    toast.error("لا يوجد اتصال بالإنترنت");
-                  } else if (!status.firebaseAccessible) {
-                    toast.error("Firebase غير متاح - استخدم LocalStorage");
-                  }
-                } catch (error) {
-                  console.error("[DEBUG] Network check failed:", error);
-                  toast.error("فشل في فحص حالة الشبكة");
-                }
-              }}
-              variant="outline"
-              size="sm"
-            >
-              فحص الشبكة
-            </Button>
-            <Button 
-              onClick={async () => {
-                try {
-                  console.log("[DEBUG] Manually refreshing orders...");
-                  const orders = await orderService.getOrders();
-                  console.log("[DEBUG] Manually fetched orders:", orders);
-                  setOrders(orders);
-                  toast.success(`تم تحديث الطلبات: ${orders.length} طلب`);
-                } catch (error) {
-                  console.error("[DEBUG] Manual refresh failed:", error);
-                  toast.error("فشل في تحديث الطلبات");
-                }
-              }}
-              variant="outline"
-              size="sm"
-            >
-              تحديث الطلبات
-            </Button>
-            <Button 
-              onClick={() => {
-                try {
-                  const localOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-                  console.log("[DEBUG] Local orders:", localOrders);
-                  toast.success(`الطلبات المحلية: ${localOrders.length} طلب`);
-                } catch (error) {
-                  console.error("[DEBUG] Local orders check failed:", error);
-                  toast.error("فشل في فحص الطلبات المحلية");
-                }
-              }}
-              variant="outline"
-              size="sm"
-            >
-              فحص المحلي
+              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearingData ? "جاري المسح..." : "مسح جميع الطلبات"}
             </Button>
             <Select value={timeFilter} onValueChange={setTimeFilter}>
               <SelectTrigger className="w-48">
@@ -780,7 +736,7 @@ const Orders = () => {
                               {formatOrderDate(order.createdAt)}
                             </TableCell>
                             <TableCell className="font-bold text-primary">
-                              {formatPrice(order.totalAmount)} جنيه
+                              {formatPrice(order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0))} جنيه
                             </TableCell>
                             <TableCell className="font-medium">
                               {order.selectedBranch}
@@ -792,16 +748,34 @@ const Orders = () => {
                               {locationInfo.street}
                             </TableCell>
                             <TableCell>
-                              <div className="space-y-1 max-w-[200px]">
+                              <div className="space-y-1 max-w-[250px]">
                                 {order.items.map((item, index) => (
-                                  <div key={index} className="text-xs bg-gray-50 p-1 rounded">
-                                    {item.quantity}x {item.productName}
-                                    {item.selectedSize && (
-                                      <span className="text-blue-600"> ({item.selectedSize})</span>
-                                    )}
-                                    {item.selectedExtra && (
-                                      <span className="text-green-600"> + {item.selectedExtra}</span>
-                                    )}
+                                  <div key={index} className="text-xs bg-gray-50 p-2 rounded border">
+                                    <div className="font-medium">
+                                      {item.quantity}× {item.productName}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      {item.selectedSize && (
+                                        <div className="text-blue-600">
+                                          📏 الحجم: {item.selectedSize}
+                                          {item.sizePrice > 0 && ` (+${formatPrice(item.sizePrice)})`}
+                                        </div>
+                                      )}
+                                      {item.selectedExtra && (
+                                        <div className="text-green-600">
+                                          ➕ إضافة: {item.selectedExtra}
+                                          {item.extraPrice > 0 && ` (+${formatPrice(item.extraPrice)})`}
+                                        </div>
+                                      )}
+                                      {item.discountPercentage > 0 && (
+                                        <div className="text-orange-600">
+                                          🏷️ خصم: {item.discountPercentage}%
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="text-xs font-bold text-primary mt-1">
+                                      السعر: {formatPrice(item.price)} × {item.quantity} = {formatPrice(item.price * item.quantity)}
+                                    </div>
                                   </div>
                                 ))}
                               </div>

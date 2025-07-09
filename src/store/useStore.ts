@@ -29,6 +29,7 @@ interface StoreState {
   updateProduct: (product: Product) => void;
   deleteProduct: (productId: string) => void;
   checkExpiredProducts: () => void;
+  applyAutoArchiving: (branches: any[]) => void;
   updateCartItemOptions: (
     productId: string,
     selectedSize?: string,
@@ -145,6 +146,23 @@ export const useStore = create<StoreState>()(
         });
         set({ products: updatedProducts });
       },
+      applyAutoArchiving: (branches: any[]) => {
+        const products = get().products;
+        // استخدام import ديناميكي بدلاً من require
+        import('@/utils/productUtils').then(({ updateProductArchiveStatus }) => {
+          const updatedProducts = updateProductArchiveStatus(products, branches);
+          
+          // تحديث المنتجات في المتجر
+          updatedProducts.forEach(updatedProduct => {
+            const currentProduct = products.find(p => p.id === updatedProduct.id);
+            if (currentProduct && currentProduct.isArchived !== updatedProduct.isArchived) {
+              get().updateProduct(updatedProduct);
+            }
+          });
+        }).catch(error => {
+          console.warn('Failed to apply auto-archiving:', error);
+        });
+      },
       updateCartItemOptions: (
         productId: string,
         selectedSize?: string,
@@ -175,6 +193,7 @@ export const useStore = create<StoreState>()(
           ),
         }));
       },
+
     }),
     {
       name: "shop-storage",

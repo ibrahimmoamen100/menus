@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import storeData from "@/data/store.json";
 import { Store } from "lucide-react";
+import { textToSlug } from "@/utils/urlUtils";
 
 interface BranchesCarouselProps {
   streetId: string;
@@ -39,7 +40,7 @@ const BranchesCarousel: React.FC<BranchesCarouselProps> = ({ streetId }) => {
                 <motion.div
                   whileHover={{ scale: 1.03 }}
                   className="group relative h-32 p-8 rounded-xl cursor-pointer bg-gradient-to-br from-primary/10 to-secondary/20 shadow-md flex flex-col items-center justify-center transition-transform duration-200 hover:shadow-md border border-primary/10"
-                  onClick={() => navigate(`/products?branchId=${branch.id}`)}
+                  onClick={() => navigate(`/products?branch=${textToSlug(branch.name)}`)}
                 >
                   <span className="text-lg font-bold text-primary mb-1 text-center whitespace-nowrap">{branch.name}</span>
                   <span className="text-xs text-gray-600 mb-1">{branch.address}</span>
