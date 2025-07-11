@@ -133,10 +133,54 @@ const Admin = () => {
   });
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
-  // State for streets
+  // State for streets, regions, and branches - تعريف جميع المتغيرات في الأعلى
   const [streets, setStreets] = useState<any[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [storeData, setStoreData] = useState<any>(null);
+
+  // State for filters
+  const [selectedRegionId, setSelectedRegionId] = useState<string | undefined>(undefined);
+  const [selectedStreetId, setSelectedStreetId] = useState<string | undefined>(undefined);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
+  
+  // State for branch filters
+  const [branchFilterRegionId, setBranchFilterRegionId] = useState<string | undefined>(undefined);
+  const [branchFilterStreetId, setBranchFilterStreetId] = useState<string | undefined>(undefined);
+
+  // Handle branch region filter change
+  const handleBranchRegionFilterChange = (regionId: string | undefined) => {
+    setBranchFilterRegionId(regionId);
+    // Reset street filter if the selected street is not in the new region
+    if (regionId && branchFilterStreetId) {
+      const regionStreets = streets.filter((s) => s.regionId === regionId).map((s) => s.id);
+      if (!regionStreets.includes(branchFilterStreetId)) {
+        setBranchFilterStreetId(undefined);
+      }
+    }
+  };
 
   const { products, addProduct, deleteProduct, updateProduct } = useStore();
+
+  // Filter branches by region and street
+  const filteredBranches = useMemo(() => {
+    return branches.filter((branch) => {
+      // Filter by region
+      if (branchFilterRegionId) {
+        const regionStreets = streets.filter((s) => s.regionId === branchFilterRegionId).map((s) => s.id);
+        if (!regionStreets.includes(branch.streetId || '')) {
+          return false;
+        }
+      }
+      
+      // Filter by street
+      if (branchFilterStreetId && branch.streetId !== branchFilterStreetId) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [branches, streets, branchFilterRegionId, branchFilterStreetId]);
 
   // Get unique suppliers from products
   const uniqueSuppliers = useMemo(() => {
@@ -235,10 +279,6 @@ const Admin = () => {
 
     loadStatistics();
   }, [products, updateProduct]);
-
-  const [selectedRegionId, setSelectedRegionId] = useState<string | undefined>(undefined);
-  const [selectedStreetId, setSelectedStreetId] = useState<string | undefined>(undefined);
-  const [selectedBranchId, setSelectedBranchId] = useState<string | undefined>(undefined);
 
   const filterProductsByDate = (products: Product[]) => {
     const now = new Date();
@@ -453,7 +493,6 @@ const Admin = () => {
   );
 
   // Region form state
-  const [regions, setRegions] = useState<Region[]>([]);
   const [regionForm, setRegionForm] = useState<RegionForm>({
     id: "",
     name: "",
@@ -462,8 +501,6 @@ const Admin = () => {
   });
 
   // Branch form state
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [storeData, setStoreData] = useState<any>(null);
   const [showProductsManager, setShowProductsManager] = useState(false);
   const [selectedBranchForProducts, setSelectedBranchForProducts] = useState<Branch | null>(null);
   const [showStreetsManager, setShowStreetsManager] = useState(false);
@@ -1245,11 +1282,76 @@ const Admin = () => {
                 onDelete={handleDelete}
                 branches={branches}
                 onUpdateBranchProducts={handleUpdateBranchProducts}
+                streets={streets}
+                regions={regions}
               />
             </TabsContent>
 
             {/* Branches Tab */}
             <TabsContent value="branches" className="space-y-6">
+              {/* Branch Filters */}
+              <Card className="p-4 shadow-lg border border-primary/20 bg-white rounded-xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <Filter className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-primary">تصفية الفروع</h3>
+                </div>
+                <div className="flex gap-4 flex-wrap">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">المنطقة</label>
+                    <Select value={branchFilterRegionId} onValueChange={handleBranchRegionFilterChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="اختر المنطقة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={undefined}>جميع المناطق</SelectItem>
+                        {regions.map((region) => (
+                          <SelectItem key={region.id} value={region.id}>
+                            {region.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">الشارع</label>
+                    <Select value={branchFilterStreetId} onValueChange={setBranchFilterStreetId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="اختر الشارع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={undefined}>جميع الشوارع</SelectItem>
+                        {streets
+                          .filter((street) => !branchFilterRegionId || street.regionId === branchFilterRegionId)
+                          .map((street) => (
+                            <SelectItem key={street.id} value={street.id}>
+                              {street.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setBranchFilterRegionId(undefined);
+                        setBranchFilterStreetId(undefined);
+                      }}
+                      className="h-10"
+                    >
+                      مسح الفلاتر
+                    </Button>
+                  </div>
+                </div>
+                {branchFilterRegionId || branchFilterStreetId ? (
+                  <div className="mt-3 p-2 bg-primary/5 rounded-lg">
+                    <p className="text-sm text-primary">
+                      عرض {filteredBranches.length} فرع من أصل {branches.length}
+                    </p>
+                  </div>
+                ) : null}
+              </Card>
+
               <Card className="p-6 shadow-lg border border-primary/30 bg-white rounded-2xl">
                 <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-primary">
                   <Building2 className="inline-block w-6 h-6 text-primary" />
@@ -1389,6 +1491,9 @@ const Admin = () => {
                         الشارع
                       </th>
                       <th className="px-4 py-3 font-bold text-primary">
+                        المنطقة
+                      </th>
+                      <th className="px-4 py-3 font-bold text-primary">
                         المنتجات
                       </th>
                       <th className="px-4 py-3 font-bold text-primary">
@@ -1397,17 +1502,20 @@ const Admin = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
-                    {branches.length === 0 ? (
+                    {filteredBranches.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={9}
                           className="py-8 text-muted-foreground text-lg"
                         >
-                          {t("admin.branches.noBranches")}
+                          {branchFilterRegionId || branchFilterStreetId 
+                            ? "لا توجد فروع تطابق الفلاتر المحددة" 
+                            : t("admin.branches.noBranches")
+                          }
                         </td>
                       </tr>
                     ) : (
-                      branches.map((branch, idx) => (
+                      filteredBranches.map((branch, idx) => (
                         <tr key={idx} className="hover:bg-primary/5 transition">
                           <td className="px-4 py-2 font-medium">{branch.name}</td>
                           <td className="px-4 py-2">{branch.address}</td>
@@ -1416,6 +1524,13 @@ const Admin = () => {
                           <td className="px-4 py-2">{branch.closeTime}</td>
                           <td className="px-4 py-2">
                             {streets.find(s => s.id === branch.streetId)?.name || "غير محدد"}
+                          </td>
+                          <td className="px-4 py-2">
+                            {(() => {
+                              const street = streets.find(s => s.id === branch.streetId);
+                              const region = street ? regions.find(r => r.id === street.regionId) : null;
+                              return region?.name || "غير محدد";
+                            })()}
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-center">

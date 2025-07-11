@@ -28,6 +28,7 @@ import {
   Archive,
   Package,
   AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ interface Branch {
   phone: string;
   openTime: string;
   closeTime: string;
+  streetId?: string;
   products?: Array<{ id: string; name: string }>;
 }
 
@@ -71,6 +73,8 @@ interface ProductTableProps {
   onDelete: (productId: string) => void;
   branches?: Branch[];
   onUpdateBranchProducts?: (branchId: string, products: Array<{ id: string; name: string }>) => void;
+  streets?: Array<{ id: string; name: string }>;
+  regions?: Array<{ id: string; name: string; streets?: string[] }>;
 }
 
 export function ProductTable({
@@ -80,6 +84,8 @@ export function ProductTable({
   onDelete,
   branches = [],
   onUpdateBranchProducts,
+  streets = [],
+  regions = [],
 }: ProductTableProps) {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -237,7 +243,7 @@ export function ProductTable({
                 تاريخ الإضافة
               </TableHead>
               <TableHead className="w-[120px] text-center">الحالة</TableHead>
-              <TableHead className="w-[120px] text-center">الفروع</TableHead>
+              <TableHead className="min-w-[300px] text-center">الفروع</TableHead>
               <TableHead className="w-[80px] text-center">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
@@ -384,7 +390,7 @@ export function ProductTable({
                 <TableCell className="text-center">
                   <div className="flex flex-col items-center gap-1">
                     {product.isArchived ? (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge variant="destructive" className="text-xs bg-blue-500 text-white">
                         <Archive className="h-3 w-3 mr-1" />
                         مؤرشف
                       </Badge>
@@ -399,35 +405,102 @@ export function ProductTable({
                         غير مرتبط
                       </Badge>
                     )}
+                    {getProductBranches(product.id).length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        في {getProductBranches(product.id).length} فرع
+                      </span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-center">
                   <div className="flex flex-col items-center gap-2">
-                    <div className="flex flex-wrap justify-center gap-1 max-w-[100px]">
-                      {getProductBranches(product.id).length > 0 ? (
-                        getProductBranches(product.id).slice(0, 2).map((branchName, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {branchName}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">لا توجد فروع</span>
-                      )}
-                      {getProductBranches(product.id).length > 2 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{getProductBranches(product.id).length - 2}
-                        </Badge>
-                      )}
-                    </div>
+                    {/* زر الإدارة في الأعلى */}
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleBranchSelection(product)}
-                      className="h-6 px-2 text-xs"
+                      className="h-6 px-2 text-xs mb-1"
                     >
                       <Settings className="h-3 w-3 mr-1" />
-                      إدارة
+                      إدارة الفروع
                     </Button>
+                    
+                    {/* عرض الفروع المشتركة مع معلومات الشارع والمنطقة */}
+                    <div className="flex flex-col items-center gap-2 max-w-[180px]">
+                      {getProductBranches(product.id).length > 0 ? (
+                        <>
+                          {/* عرض حتى 5 فروع مع معلومات الشارع والمنطقة */}
+                          <div className="flex flex-col gap-1.5 w-full max-h-44 overflow-y-auto">
+                            {getProductBranches(product.id).slice(0, 5).map((branchName, index) => {
+                              // البحث عن معلومات الفرع والشارع والمنطقة
+                              const branch = branches.find(b => b.name === branchName);
+                              const street = branch?.streetId ? streets.find(s => s.id === branch.streetId) : null;
+                              const region = street ? regions.find(r => (r.streets || []).includes(street.id)) : null;
+                              
+                              return (
+                                <div key={index} className="flex md:flex-row flex-col items-center gap-0.5 min-w-[120px] p-1 rounded-md border border-border/50 hover:bg-muted/30 transition-colors">
+                                  {/* اسم الفرع */}
+                                  <Badge 
+                                    variant="outline" 
+                                    className="text-xs w-content text-center py-1 font-medium bg-primary/5 border-primary/20 "
+                                  >
+                                    {branchName}
+                                  </Badge>
+                                  
+                                  {/* معلومات الشارع والمنطقة */}
+                                  <div className="flex flex-row items-center gap-1 mt-0.5 w-auto">
+                                    {street && (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className="text-[9px] px-1.5 py-0.5 bg-blue-50 w-full text-blue-700 border-blue-200"
+                                      >
+                                        {street.name}
+                                      </Badge>
+                                    )}
+                                    {region && (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className="text-[9px] px-1.5 py-0.5 bg-green-50 text-green-700 border-green-200"
+                                      >
+                                        {region.name}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* زر عرض المزيد إذا كان هناك أكثر من 5 فروع */}
+                          {getProductBranches(product.id).length > 5 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs text-primary hover:text-primary/80"
+                              onClick={() => handleBranchSelection(product)}
+                            >
+                              <ChevronDown className="h-3 w-3 mr-1" />
+                              عرض {getProductBranches(product.id).length - 5} فرع آخر
+                            </Button>
+                          )}
+                          
+                          {/* عداد إجمالي الفروع */}
+                          <div className="text-xs text-muted-foreground mt-1 font-medium">
+                            {getProductBranches(product.id).length} فرع
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <Badge variant="destructive" className="text-xs">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            غير مرتبط
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            لا توجد فروع
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-center">

@@ -133,6 +133,10 @@ export default function StreetManager({ onDataChange }: StreetManagerProps) {
     notes: '',
     regionId: ''
   });
+  
+  // State for street filters
+  const [streetFilterRegionId, setStreetFilterRegionId] = useState<string>("all");
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -279,6 +283,14 @@ export default function StreetManager({ onDataChange }: StreetManagerProps) {
     return branches.filter(branch => branch.streetId === streetId).length;
   };
 
+  // Filter streets by region
+  const filteredStreets = streets.filter((street) => {
+    if (streetFilterRegionId && streetFilterRegionId !== "all" && street.regionId !== streetFilterRegionId) {
+      return false;
+    }
+    return true;
+  });
+
   const handleUpdateStreetBranches = async (streetId: string, branchIds: string[]) => {
     try {
       // الحصول على البيانات الحالية من الخادم
@@ -424,6 +436,48 @@ export default function StreetManager({ onDataChange }: StreetManagerProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Street Filters */}
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">تصفية الشوارع:</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Select
+                value={streetFilterRegionId}
+                onValueChange={(value) => setStreetFilterRegionId(value)}
+              >
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="جميع المناطق" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع المناطق</SelectItem>
+                  {regions.map((region) => (
+                    <SelectItem key={region.id} value={region.id}>
+                      {region.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(streetFilterRegionId !== "all") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStreetFilterRegionId("all")}
+                  className="text-xs"
+                >
+                  مسح الفلاتر
+                </Button>
+              )}
+            </div>
+            {streetFilterRegionId !== "all" && (
+              <div className="text-sm text-gray-600">
+                عرض {filteredStreets.length} من {streets.length} شارع
+              </div>
+            )}
+          </div>
+        </div>
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -435,7 +489,7 @@ export default function StreetManager({ onDataChange }: StreetManagerProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {streets.map((street) => (
+            {filteredStreets.map((street) => (
               <TableRow key={street.id}>
                 <TableCell>
                   <div className="font-medium">{street.name}</div>
@@ -551,9 +605,12 @@ export default function StreetManager({ onDataChange }: StreetManagerProps) {
             ))}
           </TableBody>
         </Table>
-        {streets.length === 0 && (
+        {filteredStreets.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            لا توجد شوارع مضافة حالياً
+            {streetFilterRegionId !== "all"
+              ? "لا توجد شوارع في المنطقة المختارة" 
+              : "لا توجد شوارع مضافة حالياً"
+            }
           </div>
         )}
       </CardContent>
