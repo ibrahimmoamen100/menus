@@ -75,9 +75,16 @@ const ProductDetails = () => {
         (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === id)
       );
   
+  // التأكد من أن الفرع المحدد يحتوي على المنتج
+  const validBranch = branch && (branch.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === id) 
+    ? branch 
+    : (storeData.branches || []).find((b) => 
+        (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === id)
+      );
+  
   const cartItem = cart.find((item) => 
     item.productId === id && 
-    item.branchId === branch?.id
+    item.branchId === validBranch?.id
   );
 
   // Find suggested products (same category, excluding current product)
@@ -167,8 +174,8 @@ const ProductDetails = () => {
       1, 
       selectedSize, 
       selectedExtra, 
-      branch?.id, 
-      branch?.name
+      validBranch?.id, 
+      validBranch?.name
     );
     toast.success(`${t("cart.productAdded")}: ${product.name}`, {
       duration: 5000,
@@ -178,18 +185,18 @@ const ProductDetails = () => {
 
   const handleUpdateQuantity = (newQuantity: number) => {
     if (newQuantity === 0) {
-      removeFromCart(product.id, branch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
+      removeFromCart(product.id, validBranch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
       toast.success(`${t("cart.productRemoved")}: ${product.name}`, {
         duration: 5000,
         dismissible: true,
       });
     } else {
-      updateCartItemQuantity(product.id, newQuantity, branch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
+      updateCartItemQuantity(product.id, newQuantity, validBranch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
     }
   };
 
   const handleShare = () => {
-    const productUrl = `${window.location.origin}/products/${product.id}${branch?.id ? `/${branch.id}` : ''}`;
+    const productUrl = `${window.location.origin}/products/${product.id}${validBranch?.id ? `/${validBranch.id}` : ''}`;
 
     // Create a detailed message with emojis
     const message = [
@@ -442,20 +449,25 @@ const ProductDetails = () => {
                 {/* بيانات الموقع */}
                 {(() => {
                   // استخراج بيانات الفروع والشوارع والمناطق
-                    const branches = storeData.branches || [];
-  const streets = storeData.streets || [];
-  const regions = storeData.regions || [];
-                  // ابحث عن الفرع الذي يحتوي المنتج
-                  const branch = branches.find(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-                  const street = branch ? streets.find(s => s.id === branch.streetId) : null;
-                  const region = street ? regions.find(r => (r.streets || []).includes(street.id)) : null;
-                  if (!branch && !street && !region) return null;
+                  const branches = storeData.branches || [];
+                  const streets = storeData.streets || [];
+                  const regions = storeData.regions || [];
+                  
+                  // استخدام الفرع المحدد من الرابط أو البحث عن الفرع الذي يحتوي المنتج
+                  const currentBranch = branchId 
+                    ? branches.find(b => b.id === branchId)
+                    : branches.find(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+                  
+                  const street = currentBranch ? streets.find(s => s.id === currentBranch.streetId) : null;
+                  const region = street ? regions.find(r => r.id === street.regionId) : null;
+                  
+                  if (!currentBranch && !street && !region) return null;
                   return (
                     <div className="flex flex-wrap gap-2 mt-2 mb-1">
-                      {branch && (
+                      {currentBranch && (
                         <Badge className="bg-primary/10 text-primary font-bold flex items-center gap-1 px-3 py-2 text-base">
                           <Store className="w-4 h-4 mr-1 text-primary" />
-                          {branch.name}
+                          {currentBranch.name}
                         </Badge>
                       )}
                       {street && (

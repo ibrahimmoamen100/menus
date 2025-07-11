@@ -96,14 +96,44 @@ export default function Products() {
     });
   }, [searchParams, setFilters, regions, streets, branches]);
 
-  // Get active products (non-archived)
-  const activeProducts = useMemo(() => {
-    return products?.filter((product) => !product.isArchived) || [];
-  }, [products]);
+  // جلب المنتجات من داخل الفروع في store.json
+  const productsFromBranches = useMemo(() => {
+    const allProducts: Array<{
+      product: Product;
+      branch: typeof branches[0];
+      street: typeof streets[0] | null;
+      region: typeof regions[0] | null;
+    }> = [];
 
-  // Apply all filters
+    // المرور على جميع الفروع
+    branches.forEach(branch => {
+      const street = streets.find(s => s.id === branch.streetId) || null;
+      const region = street ? regions.find(r => r.id === street.regionId) || null : null;
+
+      // المرور على منتجات الفرع
+      (branch.products || []).forEach(branchProduct => {
+        const productId = typeof branchProduct === "string" ? branchProduct : branchProduct.id;
+        
+        // البحث عن المنتج في مصفوفة المنتجات العامة للحصول على تفاصيله
+        const productDetails = products?.find(p => p.id === productId);
+        
+        if (productDetails && !productDetails.isArchived) {
+          allProducts.push({
+            product: productDetails,
+            branch,
+            street,
+            region
+          });
+        }
+      });
+    });
+
+    return allProducts;
+  }, [branches, streets, regions, products]);
+
+  // تطبيق الفلاتر على المنتجات المجلوبة من الفروع
   const filteredProducts = useMemo(() => {
-    return activeProducts.filter((product) => {
+    return productsFromBranches.filter(({ product, branch, street, region }) => {
       // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -148,87 +178,38 @@ export default function Products() {
         }
       }
 
-      // Filter by branch - المنتج يجب أن يكون موجود في الفرع المحدد
-      if (filters.branchId) {
-        const branch = branches.find((b) => b.id === filters.branchId);
-        if (!branch || !(branch.products || []).map((p) => typeof p === "string" ? p : p.id).includes(product.id)) return false;
+      // Filter by branch
+      if (filters.branchId && branch.id !== filters.branchId) {
+        return false;
       }
 
-      // Filter by street - المنتج يجب أن يكون موجود في أحد فروع الشارع المحدد
-      if (filters.streetId) {
-        const streetBranches = branches.filter((b) => b.streetId === filters.streetId);
-        const branchProductIds = streetBranches.flatMap((b) => (b.products || []).map((p) => typeof p === "string" ? p : p.id));
-        if (!branchProductIds.includes(product.id)) return false;
+      // Filter by street
+      if (filters.streetId && street?.id !== filters.streetId) {
+        return false;
       }
 
-      // Filter by region - المنتج يجب أن يكون موجود في أحد فروع المنطقة المحددة
-      if (filters.regionId) {
-        const regionStreetIds = streets.filter((s) => s.regionId === filters.regionId).map((s) => s.id);
-        const regionBranches = branches.filter((b) => regionStreetIds.includes(b.streetId));
-        const branchProductIds = regionBranches.flatMap((b) => (b.products || []).map((p) => typeof p === "string" ? p : p.id));
-        if (!branchProductIds.includes(product.id)) return false;
+      // Filter by region
+      if (filters.regionId && region?.id !== filters.regionId) {
+        return false;
       }
 
       return true;
     });
-  }, [activeProducts, filters]);
+  }, [productsFromBranches, filters]);
 
-  // إنشاء قائمة المنتجات مع تكرارها لكل فرع تحتوي عليه
+  // استخدام المنتجات المفلترة مباشرة (لأنها الآن تحتوي على معلومات الفرع)
   const productsWithBranches = useMemo(() => {
-    const result: Array<{
-      product: Product;
-      branch: typeof branches[0];
-      street: typeof streets[0] | null;
-      region: typeof regions[0] | null;
-    }> = [];
-
-    filteredProducts.forEach(product => {
-      // تحديد الفروع التي تحتوي على هذا المنتج
-      let relevantBranches: typeof branches = [];
-
-      if (filters.branchId) {
-        // إذا كان هناك فلتر فرع، أضف فقط هذا الفرع
-        const branch = branches.find(b => b.id === filters.branchId && (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-        if (branch) relevantBranches.push(branch);
-      } else if (filters.streetId) {
-        // إذا كان هناك فلتر شارع، أضف جميع الفروع في هذا الشارع التي تحتوي على المنتج
-        const streetBranches = branches.filter(b => b.streetId === filters.streetId);
-        relevantBranches = streetBranches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-      } else if (filters.regionId) {
-        // إذا كان هناك فلتر منطقة، أضف جميع الفروع في هذه المنطقة التي تحتوي على المنتج
-        const regionStreetIds = streets.filter(s => s.regionId === filters.regionId).map(s => s.id);
-        const regionBranches = branches.filter(b => regionStreetIds.includes(b.streetId));
-        relevantBranches = regionBranches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-      } else {
-        // إذا لم يكن هناك فلتر، أضف جميع الفروع التي تحتوي على المنتج
-        relevantBranches = branches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-      }
-
-      // إضافة المنتج لكل فرع يحتوي عليه
-      relevantBranches.forEach(branch => {
-        const street = streets.find(s => s.id === branch.streetId) || null;
-        const region = street ? regions.find(r => r.id === street.regionId) || null : null;
-        
-        result.push({
-          product,
-          branch,
-          street,
-          region
-        });
-      });
-    });
-
-    return result;
-  }, [filteredProducts, filters.branchId, filters.streetId, filters.regionId, branches, streets, regions]);
+    return filteredProducts;
+  }, [filteredProducts]);
 
   // القيم الافتراضية لنطاق السعر
   const defaultMinPrice = useMemo(() => {
     if (!filteredProducts.length) return 0;
-    return Math.min(...filteredProducts.map((p) => p.price));
+    return Math.min(...filteredProducts.map((p) => p.product.price));
   }, [filteredProducts]);
   const defaultMaxPrice = useMemo(() => {
     if (!filteredProducts.length) return 0;
-    return Math.max(...filteredProducts.map((p) => p.price));
+    return Math.max(...filteredProducts.map((p) => p.product.price));
   }, [filteredProducts]);
 
   // Apply sorting
@@ -318,34 +299,12 @@ export default function Products() {
     setIsModalOpen(true);
   };
 
-  // حساب الفئات المتاحة فقط من المنتجات المفلترة حسب الفروع/الشوارع/المناطق (دون تصفية category)
+  // حساب الفئات المتاحة من المنتجات المجلوبة من الفروع
   const availableCategories = useMemo(() => {
-    // المنتجات المفلترة بدون شرط الفئة
-    const productsForCategories = activeProducts.filter((product) => {
-      // فلترة حسب الفرع
-      if (filters.branchId) {
-        const branch = branches.find((b) => b.id === filters.branchId);
-        if (!branch || !(branch.products || []).map((p) => typeof p === "string" ? p : p.id).includes(product.id)) return false;
-      }
-      // فلترة حسب الشارع
-      if (filters.streetId) {
-        const streetBranches = branches.filter((b) => b.streetId === filters.streetId);
-        const branchProductIds = streetBranches.flatMap((b) => (b.products || []).map((p) => typeof p === "string" ? p : p.id));
-        if (!branchProductIds.includes(product.id)) return false;
-      }
-      // فلترة حسب المنطقة
-      if (filters.regionId) {
-        const regionStreetIds = streets.filter((s) => s.regionId === filters.regionId).map((s) => s.id);
-        const regionBranches = branches.filter((b) => regionStreetIds.includes(b.streetId));
-        const branchProductIds = regionBranches.flatMap((b) => (b.products || []).map((p) => typeof p === "string" ? p : p.id));
-        if (!branchProductIds.includes(product.id)) return false;
-      }
-      return true;
-    });
     return Array.from(
-      new Set(productsForCategories.map((p) => p.category).filter(Boolean))
-    );
-  }, [activeProducts, filters.branchId, filters.streetId, filters.regionId, branches, streets]);
+      new Set(productsFromBranches.map((p) => p.product.category).filter(Boolean))
+    ) as string[];
+  }, [productsFromBranches]);
 
   return (
     <div className="min-h-screen flex flex-col">

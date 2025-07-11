@@ -85,7 +85,8 @@ export const ProductCard = ({
       (product.sizesWithPrices && product.sizesWithPrices.length > 0) ||
       (product.extras && product.extras.length > 0)
     ) {
-      const productUrl = createProductUrl(product.id, filters, regions, streets, branches);
+      // استخدام معلومات الفرع المرفقة مع المنتج بدلاً من filters
+      const productUrl = `/products/${product.id}${product.branch?.id ? `/${product.branch.id}` : ''}`;
       navigate(productUrl);
       return;
     }
