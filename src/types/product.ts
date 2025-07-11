@@ -63,7 +63,7 @@ export const FilterSchema = z.object({
   maxPrice: z.number().optional(),
   supplier: z.string().optional(),
   sortBy: z
-    .enum(["price-asc", "price-desc", "name-asc", "name-desc"])
+    .enum(["price-asc", "price-desc", "name-asc", "name-desc", "branch-asc", "branch-desc"])
     .optional(),
   regionId: z.string().optional(),
   streetId: z.string().optional(),

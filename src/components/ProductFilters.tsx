@@ -341,6 +341,60 @@ export function ProductFilters({ categories: propCategories }: { categories: str
           </AccordionContent>
         </AccordionItem>
 
+        {/* Sort Filter */}
+        <AccordionItem value="sort">
+          <AccordionTrigger className="text-sm font-medium">
+            <SortAsc className="inline-block mr-2 text-primary" size={18} />
+            {t("filters.sortBy")}
+          </AccordionTrigger>
+          <AccordionContent>
+            <RadioGroup
+              value={filters.sortBy || "branch-asc"}
+              onValueChange={(
+                value:
+                  | "default"
+                  | "price-asc"
+                  | "price-desc"
+                  | "name-asc"
+                  | "name-desc"
+                  | "branch-asc"
+                  | "branch-desc"
+              ) =>
+                setFilters({
+                  ...filters,
+                  sortBy: value === "default" ? undefined : value,
+                })
+              }
+              className="space-y-2 pt-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="branch-asc" id="branch-asc" />
+                <Label htmlFor="branch-asc">{t("filters.branchAsc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="branch-desc" id="branch-desc" />
+                <Label htmlFor="branch-desc">{t("filters.branchDesc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="price-asc" id="price-asc" />
+                <Label htmlFor="price-asc">{t("filters.priceAsc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="price-desc" id="price-desc" />
+                <Label htmlFor="price-desc">{t("filters.priceDesc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="name-asc" id="name-asc" />
+                <Label htmlFor="name-asc">{t("filters.nameAsc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="name-desc" id="name-desc" />
+                <Label htmlFor="name-desc">{t("filters.nameDesc")}</Label>
+              </div>
+            </RadioGroup>
+          </AccordionContent>
+        </AccordionItem>
+
         {/* Region Filter */}
         <AccordionItem value="region">
           <AccordionTrigger>
@@ -561,7 +615,7 @@ export function ProductFilters({ categories: propCategories }: { categories: str
         </AccordionItem> */}
 
         {/* Sort Filter */}
-        <AccordionItem value="sort">
+        {/* <AccordionItem value="sort">
           <AccordionTrigger className="text-sm font-medium">
             <SortAsc className="inline-block mr-2 text-primary" size={18} />
             {t("filters.sortBy")}
@@ -576,6 +630,8 @@ export function ProductFilters({ categories: propCategories }: { categories: str
                   | "price-desc"
                   | "name-asc"
                   | "name-desc"
+                  | "branch-asc"
+                  | "branch-desc"
               ) =>
                 setFilters({
                   ...filters,
@@ -604,9 +660,17 @@ export function ProductFilters({ categories: propCategories }: { categories: str
                 <RadioGroupItem value="name-desc" id="name-desc" />
                 <Label htmlFor="name-desc">{t("filters.nameDesc")}</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="branch-asc" id="branch-asc" />
+                <Label htmlFor="branch-asc">{t("filters.branchAsc")}</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="branch-desc" id="branch-desc" />
+                <Label htmlFor="branch-desc">{t("filters.branchDesc")}</Label>
+              </div>
             </RadioGroup>
           </AccordionContent>
-        </AccordionItem>
+        </AccordionItem> */}
       </Accordion>
 
       {/* Clear Filters Button */}

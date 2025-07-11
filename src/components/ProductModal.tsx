@@ -59,10 +59,17 @@ export function ProductModal({
   const { t } = useTranslation();
   const removeFromCart = useStore((state) => state.removeFromCart);
   const [isProductInCart, setIsProductInCart] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined);
+  const [selectedExtra, setSelectedExtra] = useState<string | undefined>(undefined);
 
   // Check if product is in cart and get its quantity
   const cartItem = product
-    ? cart.find((item) => item.product.id === product.id)
+    ? cart.find((item) =>
+        item.productId === product.id &&
+        item.branchId === (product as any).branch?.id &&
+        item.selectedSize === selectedSize &&
+        item.selectedExtra === selectedExtra
+      )
     : null;
   const isInCart = !!cartItem;
 
@@ -116,10 +123,15 @@ export function ProductModal({
   // Update isProductInCart when cart changes
   useEffect(() => {
     if (product) {
-      const cartItem = cart.find((item) => item.product.id === product.id);
+      const cartItem = cart.find((item) =>
+        item.productId === product.id &&
+        item.branchId === (product as any).branch?.id &&
+        item.selectedSize === selectedSize &&
+        item.selectedExtra === selectedExtra
+      );
       setIsProductInCart(!!cartItem);
     }
-  }, [cart, product]);
+  }, [cart, product, selectedSize, selectedExtra]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -135,7 +147,14 @@ export function ProductModal({
       return;
     }
 
-    addToCart(product, quantity);
+    addToCart(
+      product,
+      quantity,
+      selectedSize,
+      selectedExtra,
+      (product as any).branch?.id,
+      (product as any).branch?.name
+    );
     toast.success(`${t("cart.productAdded")}: ${product.name}`, {
       description: t("cart.whatWouldYouLikeToDo"),
       action: {
@@ -155,7 +174,14 @@ export function ProductModal({
     if (!product) return;
     const newQuantity = quantity + 1;
     setQuantity(newQuantity);
-    addToCart(product, 1);
+    addToCart(
+      product,
+      1,
+      selectedSize,
+      selectedExtra,
+      (product as any).branch?.id,
+      (product as any).branch?.name
+    );
   };
 
   const decrementQuantity = () => {
@@ -163,15 +189,22 @@ export function ProductModal({
     const newQuantity = Math.max(0, quantity - 1);
     setQuantity(newQuantity);
     if (newQuantity === 0) {
-      removeFromCart(product.id);
+      removeFromCart(product.id, (product as any).branch?.id, selectedSize, selectedExtra);
     } else {
-      addToCart(product, -1);
+      addToCart(
+        product,
+        -1,
+        selectedSize,
+        selectedExtra,
+        (product as any).branch?.id,
+        (product as any).branch?.name
+      );
     }
   };
 
   const handleRemoveFromCart = () => {
     if (!product) return;
-    removeFromCart(product.id);
+    removeFromCart(product.id, (product as any).branch?.id, selectedSize, selectedExtra);
     setIsProductInCart(false);
     toast.success(t("cart.productRemoved"), {
       description: t("cart.productHasBeenRemoved"),
@@ -383,6 +416,35 @@ export function ProductModal({
                   </span>
                 )}
               </div>
+
+              {/* Branch Information */}
+              {(product as any).branch && (
+                <div className="space-y-2">
+                  <h2 className="text-sm font-medium text-muted-foreground">
+                    {t("products.branch")}
+                  </h2>
+                  <div className="flex items-center gap-2 bg-primary/10 p-3 rounded-lg">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-primary"
+                    >
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    <span className="font-medium text-primary">
+                      {(product as any).branch.name}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Color and Size sections are commented out for now
               {product.color && (

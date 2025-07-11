@@ -75,7 +75,10 @@ export const ProductCard = ({
   }, [product.specialOffer, product.offerEndsAt]);
 
   // Check if product is in cart
-  const isInCart = cart.some((item) => item.productId === product.id);
+  const isInCart = cart.some((item) => 
+    item.productId === product.id && 
+    item.branchId === product.branch?.id
+  );
 
   const handleAddToCart = () => {
     if (
@@ -96,7 +99,14 @@ export const ProductCard = ({
       });
       return;
     }
-    addToCart(product, 1);
+    addToCart(
+      product, 
+      1, 
+      undefined, 
+      undefined, 
+      product.branch?.id, 
+      product.branch?.name
+    );
     toast.success(`${t("cart.productAdded")}: ${product.name}`, {
       description: t("cart.whatWouldYouLikeToDo"),
       action: {
@@ -138,7 +148,7 @@ export const ProductCard = ({
           size="sm"
           variant="secondary"
           className="bg-white/90 hover:bg-white text-black"
-          onClick={() => navigate(`/products/${product.id}`)}
+          onClick={() => navigate(`/products/${product.id}${product.branch?.id ? `/${product.branch.id}` : ''}`)}
         >
           {t("product.viewDetails")}
         </Button>

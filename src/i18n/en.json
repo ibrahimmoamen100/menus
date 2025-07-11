@@ -20,6 +20,8 @@
     "priceDesc": "Price: High to Low",
     "nameAsc": "Name: A to Z",
     "nameDesc": "Name: Z to A",
+    "branchAsc": "Branches: A to Z",
+    "branchDesc": "Branches: Z to A",
     "category": "Category",
     "subcategory": "Subcategory",
     "brand": "Brand",

@@ -18,7 +18,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Filter, MapPin, Store, Route } from "lucide-react";
+import { Filter, MapPin, Store, Route, Menu, ChefHat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -148,20 +148,20 @@ export default function Products() {
         }
       }
 
-      // Filter by branch
+      // Filter by branch - المنتج يجب أن يكون موجود في الفرع المحدد
       if (filters.branchId) {
         const branch = branches.find((b) => b.id === filters.branchId);
         if (!branch || !(branch.products || []).map((p) => typeof p === "string" ? p : p.id).includes(product.id)) return false;
       }
 
-      // Filter by street
+      // Filter by street - المنتج يجب أن يكون موجود في أحد فروع الشارع المحدد
       if (filters.streetId) {
         const streetBranches = branches.filter((b) => b.streetId === filters.streetId);
         const branchProductIds = streetBranches.flatMap((b) => (b.products || []).map((p) => typeof p === "string" ? p : p.id));
         if (!branchProductIds.includes(product.id)) return false;
       }
 
-      // Filter by region
+      // Filter by region - المنتج يجب أن يكون موجود في أحد فروع المنطقة المحددة
       if (filters.regionId) {
         const regionStreetIds = streets.filter((s) => s.regionId === filters.regionId).map((s) => s.id);
         const regionBranches = branches.filter((b) => regionStreetIds.includes(b.streetId));
@@ -172,6 +172,54 @@ export default function Products() {
       return true;
     });
   }, [activeProducts, filters]);
+
+  // إنشاء قائمة المنتجات مع تكرارها لكل فرع تحتوي عليه
+  const productsWithBranches = useMemo(() => {
+    const result: Array<{
+      product: Product;
+      branch: typeof branches[0];
+      street: typeof streets[0] | null;
+      region: typeof regions[0] | null;
+    }> = [];
+
+    filteredProducts.forEach(product => {
+      // تحديد الفروع التي تحتوي على هذا المنتج
+      let relevantBranches: typeof branches = [];
+
+      if (filters.branchId) {
+        // إذا كان هناك فلتر فرع، أضف فقط هذا الفرع
+        const branch = branches.find(b => b.id === filters.branchId && (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+        if (branch) relevantBranches.push(branch);
+      } else if (filters.streetId) {
+        // إذا كان هناك فلتر شارع، أضف جميع الفروع في هذا الشارع التي تحتوي على المنتج
+        const streetBranches = branches.filter(b => b.streetId === filters.streetId);
+        relevantBranches = streetBranches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+      } else if (filters.regionId) {
+        // إذا كان هناك فلتر منطقة، أضف جميع الفروع في هذه المنطقة التي تحتوي على المنتج
+        const regionStreetIds = streets.filter(s => s.regionId === filters.regionId).map(s => s.id);
+        const regionBranches = branches.filter(b => regionStreetIds.includes(b.streetId));
+        relevantBranches = regionBranches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+      } else {
+        // إذا لم يكن هناك فلتر، أضف جميع الفروع التي تحتوي على المنتج
+        relevantBranches = branches.filter(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
+      }
+
+      // إضافة المنتج لكل فرع يحتوي عليه
+      relevantBranches.forEach(branch => {
+        const street = streets.find(s => s.id === branch.streetId) || null;
+        const region = street ? regions.find(r => r.id === street.regionId) || null : null;
+        
+        result.push({
+          product,
+          branch,
+          street,
+          region
+        });
+      });
+    });
+
+    return result;
+  }, [filteredProducts, filters.branchId, filters.streetId, filters.regionId, branches, streets, regions]);
 
   // القيم الافتراضية لنطاق السعر
   const defaultMinPrice = useMemo(() => {
@@ -185,19 +233,62 @@ export default function Products() {
 
   // Apply sorting
   const sortedProducts = useMemo(() => {
-    return [...filteredProducts].sort((a, b) => {
-      if (filters.sortBy === "price-asc") {
-        return a.price - b.price;
-      } else if (filters.sortBy === "price-desc") {
-        return b.price - a.price;
-      } else if (filters.sortBy === "name-asc") {
-        return a.name.localeCompare(b.name);
-      } else if (filters.sortBy === "name-desc") {
-        return b.name.localeCompare(a.name);
-      }
-      return 0;
-    });
-  }, [filteredProducts, filters.sortBy]);
+    if (filters.sortBy === "branch-asc" || filters.sortBy === "branch-desc") {
+      // تجميع المنتجات حسب الفروع أولاً
+      const productsByBranch: { [branchName: string]: Array<{
+        product: Product;
+        branch: typeof branches[0];
+        street: typeof streets[0] | null;
+        region: typeof regions[0] | null;
+      }> } = {};
+      
+      // إضافة المنتجات إلى مجموعات الفروع
+      productsWithBranches.forEach(item => {
+        const branchName = item.branch?.name || "بدون فرع";
+        
+        if (!productsByBranch[branchName]) {
+          productsByBranch[branchName] = [];
+        }
+        productsByBranch[branchName].push(item);
+      });
+      
+      // ترتيب أسماء الفروع
+      const sortedBranchNames = Object.keys(productsByBranch).sort((a, b) => {
+        if (filters.sortBy === "branch-asc") {
+          return a.localeCompare(b);
+        } else {
+          return b.localeCompare(a);
+        }
+      });
+      
+      // تجميع المنتجات مرتبة حسب الفروع
+      const result: Array<{
+        product: Product;
+        branch: typeof branches[0];
+        street: typeof streets[0] | null;
+        region: typeof regions[0] | null;
+      }> = [];
+      sortedBranchNames.forEach(branchName => {
+        result.push(...productsByBranch[branchName]);
+      });
+      
+      return result;
+    } else {
+      // الترتيب العادي للمنتجات
+      return [...productsWithBranches].sort((a, b) => {
+        if (filters.sortBy === "price-asc") {
+          return a.product.price - b.product.price;
+        } else if (filters.sortBy === "price-desc") {
+          return b.product.price - a.product.price;
+        } else if (filters.sortBy === "name-asc") {
+          return a.product.name.localeCompare(b.product.name);
+        } else if (filters.sortBy === "name-desc") {
+          return b.product.name.localeCompare(a.product.name);
+        }
+        return 0;
+      });
+    }
+  }, [productsWithBranches, filters.sortBy, branches]);
 
   // Calculate pagination
   const totalPages = Math.ceil(sortedProducts.length / productsPerPage);
@@ -215,8 +306,15 @@ export default function Products() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleViewProduct = (product: Product) => {
-    setSelectedProduct(product);
+  const handleViewProduct = (product: Product, branch?: any, street?: any, region?: any) => {
+    // إضافة معلومات الفرع والشارع والمنطقة إلى المنتج
+    const productWithBranch = {
+      ...product,
+      branch: branch ? { id: branch.id, name: branch.name } : undefined,
+      street: street ? { id: street.id, name: street.name } : undefined,
+      region: region ? { id: region.id, name: region.name } : undefined,
+    };
+    setSelectedProduct(productWithBranch);
     setIsModalOpen(true);
   };
 
@@ -254,31 +352,6 @@ export default function Products() {
 
 
       <div className="container py-8">
-        <h1 className="text-xl font-bold mb-2 flex items-center gap-2">
-          <MapPin className="inline-block text-primary w-7 h-7 mr-1" />
-          <span>موقع التسوق الحالي</span>
-        </h1>
-        {filters.branchId && selectedBranch ? (
-          <div className="flex flex-wrap gap-2 mb-6">
-            <Badge className="bg-primary/10 text-primary font-bold flex items-center gap-1 px-3 py-2 text-base">
-              <Store className="w-4 h-4 mr-1 text-primary" />
-              {selectedBranch.name || "-"}
-            </Badge>
-            <Badge className="bg-blue-50 text-blue-700 font-bold flex items-center gap-1 px-3 py-2 text-base">
-              <Route className="w-4 h-4 mr-1 text-blue-600" />
-
-              فرع : {selectedStreet?.name || "-"}
-            </Badge>
-            <Badge className="bg-green-50 text-green-700 font-bold flex items-center gap-1 px-3 py-2 text-base">
-              <MapPin className="w-4 h-4 mr-1 text-green-600" />
-              بمنطقه : {selectedRegion?.name || "-"}
-            </Badge>
-          </div>
-        ) : (
-          <div className="mb-6">
-            <Badge className="bg-primary/10 text-primary font-bold px-3 py-2 text-base">جميع الفروع</Badge>
-          </div>
-        )}
 
         <div className="w-full mb-6">
           <ProductSearch
@@ -386,26 +459,141 @@ export default function Products() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {currentProducts.map((product) => {
-                  // ابحث عن الفرع الذي يحتوي المنتج
-                  const branch = branches.find(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
-                  const street = branch ? streets.find(s => s.id === branch.streetId) : null;
-                  const region = street ? regions.find(r => (r.streets || []).includes(street.id)) : null;
-                  return (
-                    <ProductCard
-                      key={product.id}
-                      product={{
-                        ...product,
-                        branch: branch ? { id: branch.id, name: branch.name } : undefined,
-                        street: street ? { id: street.id, name: street.name } : undefined,
-                        region: region ? { id: region.id, name: region.name } : undefined,
-                      }}
-                      onView={() => handleViewProduct(product)}
-                    />
-                  );
-                })}
-              </div>
+              <>
+                {/* عرض مع العناوين عندما يكون الترتيب حسب الفروع أو عند التصفية حسب الشارع أو الفرع أو عندما تكون المنتجات مجمعة حسب الفروع */}
+                {(filters.sortBy === "branch-asc" || filters.sortBy === "branch-desc" || filters.streetId || filters.branchId || (currentProducts.length > 0 && currentProducts.some(item => item?.branch))) ? (
+                  <div className="space-y-8">
+                    {(() => {
+                      // تجميع المنتجات حسب الفروع للعرض مع العناوين
+                      const productsByBranch: { [branchName: string]: Array<{
+                        product: Product;
+                        branch: typeof branches[0];
+                        street: typeof streets[0] | null;
+                        region: typeof regions[0] | null;
+                      }> } = {};
+                      
+                      currentProducts.forEach(item => {
+                        if (!item || !item.branch) return;
+                        const branchName = item.branch.name || "بدون فرع";
+                        
+                        if (!productsByBranch[branchName]) {
+                          productsByBranch[branchName] = [];
+                        }
+                        productsByBranch[branchName].push(item);
+                      });
+                      
+                      // ترتيب أسماء الفروع حسب الترتيب المختار
+                      const sortedBranchNames = Object.keys(productsByBranch).sort((a, b) => {
+                        if (filters.sortBy === "branch-asc") {
+                          return a.localeCompare(b);
+                        } else if (filters.sortBy === "branch-desc") {
+                          return b.localeCompare(a);
+                        }
+                        return 0;
+                      });
+                      
+                      return sortedBranchNames.map((branchName, index) => {
+                        // البحث عن معلومات الفرع والشارع والمنطقة
+                        const firstItem = productsByBranch[branchName][0];
+                        if (!firstItem) return null;
+                        
+                        const branch = firstItem.branch;
+                        const street = firstItem.street;
+                        const region = firstItem.region;
+                        
+                        return (
+                          <div key={branchName} className="space-y-4">
+                            {/* عنوان الفرع */}
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                              <div className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-primary/15 via-primary/10 to-primary/5 rounded-xl border-2 border-primary/30 shadow-lg">
+                                <div className="flex items-center gap-2">
+                                  <ChefHat className="w-6 h-6 text-primary" />
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <h2 className="md:text-xl text-lg font-bold text-primary">
+                                    قائمة {branchName}
+                                  </h2>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {region && (
+                                      <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full border border-blue-200 flex items-center gap-1">
+                                        <MapPin className="w-3 h-3 inline mr-1" />
+                                        {region.name}
+                                      </span>
+                                    )}
+                                    {street && (
+                                      <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200 flex items-center gap-1">
+                                        <Route className="w-3 h-3 inline mr-1" />
+                                        {street.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-sm text-muted-foreground font-medium mt-1">
+                                    {productsByBranch[branchName].length} منتج متوفر
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                            </div>
+                            
+                            {/* منتجات الفرع */}
+                            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                              {productsByBranch[branchName].map((item) => {
+                                if (!item || !item.product || !item.branch) return null;
+                                return (
+                                  <ProductCard
+                                    key={`${item.product.id}-${item.branch.id}`}
+                                    product={{
+                                      ...item.product,
+                                      branch: item.branch ? { id: item.branch.id, name: item.branch.name } : undefined,
+                                      street: item.street ? { id: item.street.id, name: item.street.name } : undefined,
+                                      region: item.region ? { id: item.region.id, name: item.region.name } : undefined,
+                                    }}
+                                    onView={() => handleViewProduct(item.product, item.branch, item.street, item.region)}
+                                  />
+                                );
+                              })}
+                            </div>
+                            
+                            {/* فاصل بين الفروع (إلا إذا كان آخر فرع) */}
+                            {/* {index < sortedBranchNames.length - 1 && (
+                              <div className="my-12 flex items-center justify-center">
+                                <div className="flex items-center gap-4 w-full max-w-md">
+                                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-full border border-gray-200">
+                                    <Store className="w-4 h-4 text-gray-400" />
+                                    <span className="text-sm text-gray-500 font-medium">الفرع التالي</span>
+                                  </div>
+                                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                                </div>
+                              </div>
+                            )} */}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                ) : (
+                  /* العرض العادي للمنتجات بدون عناوين الفروع */
+                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {currentProducts.map((item) => {
+                      if (!item || !item.product || !item.branch) return null;
+                      return (
+                        <ProductCard
+                          key={`${item.product.id}-${item.branch.id}`}
+                          product={{
+                            ...item.product,
+                            branch: item.branch ? { id: item.branch.id, name: item.branch.name } : undefined,
+                            street: item.street ? { id: item.street.id, name: item.street.name } : undefined,
+                            region: item.region ? { id: item.region.id, name: item.region.name } : undefined,
+                          }}
+                          onView={() => handleViewProduct(item.product, item.branch, item.street, item.region)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Pagination */}

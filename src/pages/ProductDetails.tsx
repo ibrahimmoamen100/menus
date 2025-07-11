@@ -35,12 +35,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import initialData from "@/data/store.json";
+import storeData from "@/data/store.json";
 import { Badge } from "@/components/ui/badge";
 import { Store, Route, MapPin } from "lucide-react";
 
 const ProductDetails = () => {
-  const { id } = useParams();
+  const { id, branchId } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -68,8 +68,17 @@ const ProductDetails = () => {
   // Find current product
   const product = products.find((p) => p.id === id);
 
-  // Check if product is in cart
-  const cartItem = cart.find((item) => item.productId === id);
+  // تحديد الفرع بناءً على branchId في الرابط أو البحث عن أول فرع يحتوي على المنتج
+  const branch = branchId 
+    ? (storeData.branches || []).find((b) => b.id === branchId)
+    : (storeData.branches || []).find((b) => 
+        (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === id)
+      );
+  
+  const cartItem = cart.find((item) => 
+    item.productId === id && 
+    item.branchId === branch?.id
+  );
 
   // Find suggested products (same category, excluding current product)
   const suggestedProducts = products
@@ -152,7 +161,15 @@ const ProductDetails = () => {
       product.extras && product.extras.length > 0 && selectedExtraIdx !== null
         ? product.extras[selectedExtraIdx]?.name
         : undefined;
-    addToCart(product, 1, selectedSize, selectedExtra);
+    
+    addToCart(
+      product, 
+      1, 
+      selectedSize, 
+      selectedExtra, 
+      branch?.id, 
+      branch?.name
+    );
     toast.success(`${t("cart.productAdded")}: ${product.name}`, {
       duration: 5000,
       dismissible: true,
@@ -161,18 +178,18 @@ const ProductDetails = () => {
 
   const handleUpdateQuantity = (newQuantity: number) => {
     if (newQuantity === 0) {
-      removeFromCart(product.id);
+      removeFromCart(product.id, branch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
       toast.success(`${t("cart.productRemoved")}: ${product.name}`, {
         duration: 5000,
         dismissible: true,
       });
     } else {
-      updateCartItemQuantity(product.id, newQuantity);
+      updateCartItemQuantity(product.id, newQuantity, branch?.id, cartItem?.selectedSize, cartItem?.selectedExtra);
     }
   };
 
   const handleShare = () => {
-    const productUrl = `${window.location.origin}/products/${product.id}`;
+    const productUrl = `${window.location.origin}/products/${product.id}${branch?.id ? `/${branch.id}` : ''}`;
 
     // Create a detailed message with emojis
     const message = [
@@ -425,9 +442,9 @@ const ProductDetails = () => {
                 {/* بيانات الموقع */}
                 {(() => {
                   // استخراج بيانات الفروع والشوارع والمناطق
-                  const branches = initialData.branches || [];
-                  const streets = initialData.streets || [];
-                  const regions = initialData.regions || [];
+                    const branches = storeData.branches || [];
+  const streets = storeData.streets || [];
+  const regions = storeData.regions || [];
                   // ابحث عن الفرع الذي يحتوي المنتج
                   const branch = branches.find(b => (b.products || []).some(p => (typeof p === "string" ? p : p.id) === product.id));
                   const street = branch ? streets.find(s => s.id === branch.streetId) : null;

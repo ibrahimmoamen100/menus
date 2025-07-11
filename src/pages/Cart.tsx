@@ -137,13 +137,34 @@ const Cart = () => {
 
   // Debug: طباعة محتوى السلة والمنتجات والربط بينهم
   useEffect(() => {
-    
+    console.log("=== DEBUG CART ===");
+    console.log("Cart items:", cart);
+    console.log("Cart with products:", cartWithProducts);
   }, [cart, products, cartWithProducts]);
 
   // Group cart items by branch
   const branchGroups = cartWithProducts.reduce((groups: any[], item) => {
-    // ابحث عن الفرع الذي يحتوي المنتج
-    const branch = (storeData.branches || []).find((b) => (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === item.product.id));
+    // استخدام معلومات الفرع المحفوظة في السلة
+    let branch = null;
+    let street = null;
+    let region = null;
+    
+    if (item.branchId) {
+      // إذا كان هناك معرف فرع محفوظ، استخدمه
+      branch = (storeData.branches || []).find((b) => b.id === item.branchId);
+      if (branch) {
+        street = (storeData.streets || []).find((s) => s.id === branch.streetId);
+        region = street ? (storeData.regions || []).find((r) => r.id === street.regionId) : null;
+      }
+    } else {
+      // للعناصر القديمة التي لا تحتوي على معرف فرع، ابحث عن الفرع
+      branch = (storeData.branches || []).find((b) => (b.products || []).some((p: any) => (typeof p === "string" ? p : p.id) === item.product.id));
+      if (branch) {
+        street = (storeData.streets || []).find((s) => s.id === branch.streetId);
+        region = street ? (storeData.regions || []).find((r) => r.id === street.regionId) : null;
+      }
+    }
+    
     // حساب السعر الأساسي مع الخصم
     const basePrice = item.product.specialOffer && item.product.discountPercentage
       ? item.product.price - (item.product.price * item.product.discountPercentage) / 100
@@ -188,8 +209,7 @@ const Cart = () => {
       return groups;
     }
 
-    const street = (storeData.streets || []).find((s) => s.id === branch.streetId);
-    const region = street ? (storeData.regions || []).find((r) => (r.streets || []).includes(street.id)) : null;
+    // البحث عن مجموعة موجودة لنفس الفرع
     const existingGroup = groups.find((g) => g.branch.id === branch.id);
     if (existingGroup) {
       existingGroup.items.push(item);
@@ -208,7 +228,8 @@ const Cart = () => {
 
   // Debug: طباعة مجموعات الفروع
   useEffect(() => {
-  
+    console.log("=== DEBUG BRANCH GROUPS ===");
+    console.log("Branch groups:", branchGroups);
   }, [branchGroups]);
 
   const handleDeleteClick = (productId: string) => {
@@ -218,7 +239,13 @@ const Cart = () => {
 
   const handleConfirmDelete = () => {
     if (productToDelete) {
-      removeFromCart(productToDelete);
+      // البحث عن العنصر في السلة للحصول على معلوماته
+      const item = cart.find((i) => i.productId === productToDelete);
+      if (item) {
+        removeFromCart(productToDelete, item.branchId, item.selectedSize, item.selectedExtra);
+      } else {
+        removeFromCart(productToDelete);
+      }
       setShowDeleteAlert(false);
       setProductToDelete(null);
     }
@@ -241,9 +268,16 @@ const Cart = () => {
     // إزالة العنصر القديم بنفس المنتج والحجم/الإضافة القديمة
     const item = cartWithProducts.find((i) => i.product.id === productId);
     if (!item) return;
-    removeFromCart(productId);
+    removeFromCart(productId, item.branchId, item.selectedSize, item.selectedExtra);
     // أضف العنصر الجديد بنفس الكمية ولكن بالحجم/الإضافة الجديدة
-    addToCart(item.product, item.quantity, selectedSize, selectedExtra);
+    addToCart(
+      item.product, 
+      item.quantity, 
+      selectedSize, 
+      selectedExtra, 
+      item.branchId, 
+      item.branchName
+    );
   };
 
   // دالة التحقق عند الضغط على زر شراء من هذا الفرع
@@ -362,7 +396,7 @@ const Cart = () => {
       
       // إزالة المنتجات من هذا الفرع من السلة
       group.items.forEach((item: any) => {
-        removeFromCart(item.product.id);
+        removeFromCart(item.product.id, item.branchId, item.selectedSize, item.selectedExtra);
       });
       
     } catch (e) {

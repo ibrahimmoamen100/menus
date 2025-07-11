@@ -8,6 +8,8 @@ interface CartItem {
   quantity: number;
   selectedSize?: string;
   selectedExtra?: string;
+  branchId?: string; // إضافة معرف الفرع
+  branchName?: string; // إضافة اسم الفرع
 }
 
 interface StoreState {
@@ -19,10 +21,12 @@ interface StoreState {
     product: Product,
     quantity?: number,
     selectedSize?: string,
-    selectedExtra?: string
+    selectedExtra?: string,
+    branchId?: string,
+    branchName?: string
   ) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartItemQuantity: (productId: string, quantity: number) => void;
+  removeFromCart: (productId: string, branchId?: string, selectedSize?: string, selectedExtra?: string) => void;
+  updateCartItemQuantity: (productId: string, quantity: number, branchId?: string, selectedSize?: string, selectedExtra?: string) => void;
   setFilters: (filters: Filter) => void;
   clearCart: () => void;
   addProduct: (product: Product) => void;
@@ -63,16 +67,24 @@ export const useStore = create<StoreState>()(
         minPrice: undefined,
         maxPrice: undefined,
         supplier: undefined,
-        sortBy: undefined,
+        sortBy: 'branch-asc',
       },
       setProducts: (products) => set({ products }),
-      addToCart: (product, quantity = 1, selectedSize, selectedExtra) =>
+      addToCart: (
+        product,
+        quantity = 1,
+        selectedSize,
+        selectedExtra,
+        branchId,
+        branchName
+      ) =>
         set((state) => {
           const existingItem = state.cart.find(
             (cartItem) =>
               cartItem.productId === product.id &&
               cartItem.selectedSize === selectedSize &&
-              cartItem.selectedExtra === selectedExtra
+              cartItem.selectedExtra === selectedExtra &&
+              cartItem.branchId === branchId
           );
 
           if (existingItem) {
@@ -80,7 +92,8 @@ export const useStore = create<StoreState>()(
               cart: state.cart.map((cartItem) =>
                 cartItem.productId === product.id &&
                 cartItem.selectedSize === selectedSize &&
-                cartItem.selectedExtra === selectedExtra
+                cartItem.selectedExtra === selectedExtra &&
+                cartItem.branchId === branchId
                   ? { ...cartItem, quantity: cartItem.quantity + quantity }
                   : cartItem
               ),
@@ -90,24 +103,39 @@ export const useStore = create<StoreState>()(
           return {
             cart: [
               ...state.cart,
-              { productId: product.id, quantity, selectedSize, selectedExtra },
+              { productId: product.id, quantity, selectedSize, selectedExtra, branchId, branchName },
             ],
           };
         }),
-      removeFromCart: (productId) =>
+      removeFromCart: (productId, branchId, selectedSize, selectedExtra) =>
         set((state) => ({
-          cart: state.cart.filter((item) => item.productId !== productId),
+          cart: state.cart.filter((item) => 
+            !(item.productId === productId && 
+              item.branchId === branchId && 
+              item.selectedSize === selectedSize && 
+              item.selectedExtra === selectedExtra)
+          ),
         })),
-      updateCartItemQuantity: (productId, quantity) =>
+      updateCartItemQuantity: (productId, quantity, branchId, selectedSize, selectedExtra) =>
         set((state) => {
           if (quantity <= 0) {
             return {
-              cart: state.cart.filter((item) => item.productId !== productId),
+              cart: state.cart.filter((item) => 
+                !(item.productId === productId && 
+                  item.branchId === branchId && 
+                  item.selectedSize === selectedSize && 
+                  item.selectedExtra === selectedExtra)
+              ),
             };
           }
           return {
             cart: state.cart.map((item) =>
-              item.productId === productId ? { ...item, quantity } : item
+              (item.productId === productId && 
+               item.branchId === branchId && 
+               item.selectedSize === selectedSize && 
+               item.selectedExtra === selectedExtra) 
+                ? { ...item, quantity } 
+                : item
             ),
           };
         }),
